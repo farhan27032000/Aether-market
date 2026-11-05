@@ -796,6 +796,113 @@ function StageForm() {
 }
 
 // ---------------------------------------------------------------------------
+// Pricing
+// ---------------------------------------------------------------------------
+
+type PricingPlan = {
+  name: string
+  price: string
+  period: string
+  description: string
+  features: string[]
+  cta: string
+  popular?: boolean
+}
+
+const PRICING_PLANS: PricingPlan[] = [
+  {
+    name: 'Single Listing',
+    price: '$5',
+    period: '/ per listing',
+    description: 'Perfect for owners and agents staging a single property or plot.',
+    features: ['1 Active Listing', 'Before & After Interactive Staging', 'HD Image Support'],
+    cta: 'Get Started',
+  },
+  {
+    name: 'Pro Subscription',
+    price: '$99',
+    period: '/ month',
+    description: 'Built for agencies and developers moving inventory at scale.',
+    features: ['Unlimited Property Listings', 'Featured Placement on Marketplace', 'Priority Rendering & Support'],
+    cta: 'Subscribe Now',
+    popular: true,
+  },
+]
+
+function Pricing({ onNavigate }: { onNavigate: (id: string) => void }) {
+  return (
+    <section id="pricing" className="bg-ink-900 py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-accent-emerald/30 bg-accent-emerald/10 px-3 py-1 text-xs font-semibold text-accent-emerald-light">
+            <CreditCard className="h-3.5 w-3.5" /> Pricing & Packages
+          </span>
+          <h2 className="mt-4 font-display text-3xl font-bold text-white sm:text-4xl">Simple, transparent pricing</h2>
+          <p className="mt-3 text-slate-400">Pay per listing or go unlimited. No hidden fees.</p>
+        </div>
+
+        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
+          {PRICING_PLANS.map((plan) => (
+            <div
+              key={plan.name}
+              className={cn(
+                'relative flex flex-col rounded-2xl border p-8 transition',
+                plan.popular
+                  ? 'border-accent-indigo/50 bg-gradient-to-b from-accent-indigo/15 to-ink-800/80 shadow-2xl shadow-accent-indigo/20'
+                  : 'border-white/5 bg-ink-800/60 hover:border-white/10',
+              )}
+            >
+              {plan.popular && (
+                <span className="absolute -top-3 right-6 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-accent-indigo to-accent-emerald px-3 py-1 text-xs font-semibold text-white shadow-lg">
+                  <Star className="h-3 w-3 fill-current" /> Popular
+                </span>
+              )}
+
+              <h3 className="font-display text-xl font-bold text-white">{plan.name}</h3>
+              <p className="mt-2 text-sm text-slate-400">{plan.description}</p>
+
+              <div className="mt-6 flex items-baseline gap-2">
+                <span className="font-display text-5xl font-bold text-white">{plan.price}</span>
+                <span className="text-sm text-slate-400">{plan.period}</span>
+              </div>
+
+              <ul className="mt-8 flex-1 space-y-3">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm text-slate-300">
+                    <span
+                      className={cn(
+                        'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                        plan.popular ? 'bg-accent-indigo/20 text-accent-indigo-light' : 'bg-accent-emerald/15 text-accent-emerald-light',
+                      )}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => onNavigate('stage')}
+                className={cn(
+                  'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition',
+                  plan.popular
+                    ? 'bg-accent-indigo text-white hover:bg-accent-indigo-light hover:text-ink-900'
+                    : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
+                )}
+              >
+                {plan.cta} <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // App Entry
 // ---------------------------------------------------------------------------
 
@@ -810,6 +917,7 @@ export default function App() {
         <Hero onNavigate={navigate} />
         <Marketplace />
         <StageForm />
+        <Pricing onNavigate={navigate} />
       </main>
       {verifyModalOpen && <SellerVerificationModal onClose={() => setVerifyModalOpen(false)} />}
     </div>
