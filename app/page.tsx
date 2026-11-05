@@ -39,6 +39,61 @@ const MARKET_CATEGORY_ICONS: Record<MarketFilter, typeof Building2> = {
   services: Briefcase,
 }
 
+// ---------------------------------------------------------------------------
+// countries & regions
+// ---------------------------------------------------------------------------
+
+const COUNTRY_GROUPS = [
+  {
+    region: 'Middle East',
+    countries: [
+      { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪' },
+      { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦' },
+      { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+      { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
+      { code: 'BH', name: 'Bahrain', flag: '🇧🇭' },
+      { code: 'OM', name: 'Oman', flag: '🇴🇲' },
+    ],
+  },
+  {
+    region: 'Asia & Asia-Pacific',
+    countries: [
+      { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+      { code: 'JP', name: 'Japan', flag: '🇯🇵' },
+      { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+      { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
+      { code: 'TH', name: 'Thailand', flag: '🇹🇭' },
+      { code: 'IN', name: 'India', flag: '🇮🇳' },
+      { code: 'ID', name: 'Indonesia', flag: '🇮🇩' },
+      { code: 'VN', name: 'Vietnam', flag: '🇻🇳' },
+      { code: 'PH', name: 'Philippines', flag: '🇵🇭' },
+    ],
+  },
+  {
+    region: 'Europe & Americas',
+    countries: [
+      { code: 'US', name: 'United States', flag: '🇺🇸' },
+      { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
+      { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+      { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+      { code: 'FR', name: 'France', flag: '🇫🇷' },
+      { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+    ],
+  },
+] as const
+
+type CountryCode = (typeof COUNTRY_GROUPS)[number]['countries'][number]['code']
+type CountryFilter = CountryCode | 'all'
+
+const ALL_COUNTRIES: readonly { code: CountryCode; name: string; flag: string }[] = COUNTRY_GROUPS.flatMap(
+  (g): readonly { code: CountryCode; name: string; flag: string }[] => g.countries,
+)
+
+function countryLabel(code: CountryFilter) {
+  if (code === 'all') return 'All Countries'
+  return ALL_COUNTRIES.find((c) => c.code === code)?.name ?? code
+}
+
 interface Seller {
   name: string
   agency: string
@@ -55,6 +110,8 @@ interface Listing {
   id: string
   title: string
   location: string
+  /** Country the item is located in, used by the search bar's country filter. */
+  country: CountryCode
   marketCategory: MarketCategory
   /** Short type label shown on the card, e.g. "Raw Land / Plot" or "Luxury Sedan". */
   subcategory: string
@@ -85,6 +142,7 @@ const LISTINGS: Listing[] = [
     id: 'austin-land-plot',
     title: 'Austin Hillside Development Plot',
     location: 'Austin, TX',
+    country: 'US',
     marketCategory: 'real-estate',
     subcategory: 'Raw Land / Plot',
     condition: 'Shovel-ready',
@@ -105,6 +163,7 @@ const LISTINGS: Listing[] = [
     id: 'commercial-warehouse',
     title: 'Commercial Distribution Warehouse',
     location: 'Dallas, TX',
+    country: 'US',
     marketCategory: 'real-estate',
     subcategory: 'Commercial Warehouse',
     condition: 'Move-in ready',
@@ -123,6 +182,7 @@ const LISTINGS: Listing[] = [
     id: 'luxury-sedan',
     title: '2022 BMW M5 Competition',
     location: 'Miami, FL',
+    country: 'US',
     marketCategory: 'vehicles',
     subcategory: 'Luxury Sedan',
     condition: 'Used – Excellent',
@@ -141,6 +201,7 @@ const LISTINGS: Listing[] = [
     id: 'industrial-generator',
     title: '500 kW Industrial Diesel Generator',
     location: 'Houston, TX',
+    country: 'US',
     marketCategory: 'industrial',
     subcategory: 'Power Generation',
     condition: 'Refurbished',
@@ -159,6 +220,7 @@ const LISTINGS: Listing[] = [
     id: 'mac-studio',
     title: 'Apple Mac Studio (M2 Ultra)',
     location: 'San Francisco, CA',
+    country: 'US',
     marketCategory: 'electronics',
     subcategory: 'Desktop Computer',
     condition: 'Like New',
@@ -177,6 +239,7 @@ const LISTINGS: Listing[] = [
     id: 'skyline-loft',
     title: 'Skyline Loft',
     location: 'Austin, TX',
+    country: 'US',
     marketCategory: 'real-estate',
     subcategory: 'Apartment · Living Room',
     condition: 'Renovated',
@@ -197,6 +260,7 @@ const LISTINGS: Listing[] = [
     id: 'harbor-kitchen',
     title: 'Harbor View Residence',
     location: 'Seattle, WA',
+    country: 'US',
     marketCategory: 'real-estate',
     subcategory: 'House · Kitchen',
     condition: 'Renovated',
@@ -217,6 +281,7 @@ const LISTINGS: Listing[] = [
     id: 'product-photography',
     title: 'Pro Product & Property Photography',
     location: 'Phoenix, AZ',
+    country: 'US',
     marketCategory: 'services',
     subcategory: 'Business Service',
     condition: 'Available this week',
@@ -243,6 +308,7 @@ const LISTINGS: Listing[] = [
     id: 'licensed-electrician',
     title: 'Licensed Electrician & Generator Installs',
     location: 'Denver, CO',
+    country: 'US',
     marketCategory: 'services',
     subcategory: 'Contractor Service',
     condition: 'Booking next 48 hrs',
@@ -269,6 +335,7 @@ const LISTINGS: Listing[] = [
     id: 'refurbished-macbook',
     title: 'Refurbished MacBook Pro 14" (M3 Pro)',
     location: 'Chicago, IL',
+    country: 'US',
     marketCategory: 'electronics',
     subcategory: 'Retail · Independent Shop',
     condition: 'Shop Refurbished',
@@ -290,6 +357,90 @@ const LISTINGS: Listing[] = [
     listedDaysAgo: 2,
     isVerifiedListing: true,
     coordinates: { lat: 41.91, lng: -87.68 },
+  },
+  {
+    id: 'dubai-commercial-tower',
+    title: 'Dubai, UAE — Commercial Tower',
+    location: 'Business Bay, Dubai, UAE',
+    country: 'AE',
+    marketCategory: 'real-estate',
+    subcategory: 'Commercial Office Tower',
+    condition: 'Grade A · Fully leased',
+    price: 'AED 185,000,000',
+    specs: ['28 floors', '310,000 sqft NLA', 'Canal frontage'],
+    image: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Freehold Grade A office tower in Business Bay with direct Dubai Canal frontage, 94% occupancy across multinational tenants, and LEED Gold certification. Sold with full tenancy schedules and service-charge history.',
+    features: ['Freehold title', 'LEED Gold', '94% occupancy', '450 basement parking bays'],
+    seller: { name: 'Layla Al Mansoori', agency: 'Gulf Prime Commercial Realty', initials: 'LM', responseTime: '~30 min', isVerifiedAgent: true },
+    listedDaysAgo: 3,
+    isVerifiedListing: true,
+    coordinates: { lat: 25.19, lng: 55.27 },
+  },
+  {
+    id: 'riyadh-logistics-hub',
+    title: 'Riyadh, Saudi Arabia — Industrial Logistics',
+    location: 'Second Industrial City, Riyadh, Saudi Arabia',
+    country: 'SA',
+    marketCategory: 'industrial',
+    subcategory: 'Logistics Park · Warehousing',
+    condition: 'New build',
+    price: 'SAR 64,000,000',
+    specs: ['120,000 sqm plot', '14 m clear height', '36 dock levellers'],
+    image: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Newly completed temperature-zoned logistics facility with direct access to the Riyadh–Dammam highway. Includes cold-chain chambers, mezzanine offices, and an approved MODON operating licence.',
+    features: ['Cold-chain ready', 'Highway access', 'MODON licensed', 'Solar-ready roof'],
+    seller: { name: 'Faisal Al Harbi', agency: 'Najd Industrial Estates', initials: 'FH', responseTime: '~1 hr', isVerifiedAgent: true },
+    listedDaysAgo: 5,
+    isVerifiedListing: true,
+    coordinates: { lat: 24.6, lng: 46.83 },
+  },
+  {
+    id: 'tokyo-tech-equipment',
+    title: 'Tokyo, Japan — Tech Equipment',
+    location: 'Akihabara, Tokyo, Japan',
+    country: 'JP',
+    marketCategory: 'electronics',
+    subcategory: 'Lab & Server Equipment Lot',
+    condition: 'Used – Tested',
+    price: '¥18,500,000',
+    specs: ['8× GPU servers', '2 network racks', 'Full test reports'],
+    image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Decommissioned R&D lab lot including GPU compute servers, managed switches, and precision test instruments. Every unit has been bench-tested with logs and is ready for export or local pickup.',
+    features: ['Bench-tested units', 'Export paperwork available', 'Pallet packing', 'Local pickup in Akihabara'],
+    seller: {
+      name: 'Kenji Watanabe',
+      agency: 'Akiba Pro Equipment',
+      initials: 'KW',
+      responseTime: '~10 min',
+      isVerifiedAgent: true,
+      plan: 'verified-seller',
+      phone: '+81 3-5555-0142',
+    },
+    listedDaysAgo: 1,
+    isVerifiedListing: true,
+    coordinates: { lat: 35.7, lng: 139.77 },
+  },
+  {
+    id: 'singapore-retail-hub',
+    title: 'Singapore — Retail Hub',
+    location: 'Orchard Road, Singapore',
+    country: 'SG',
+    marketCategory: 'real-estate',
+    subcategory: 'Retail Podium · Strata',
+    condition: 'Fitted & trading',
+    price: 'S$42,000,000',
+    specs: ['3 retail levels', '58,000 sqft GFA', 'MRT-linked'],
+    image: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Prime strata retail podium on Orchard Road with an underground MRT link, anchor F&B tenants, and strong weekend footfall. Sold with existing leases and an approved façade refresh.',
+    features: ['MRT underground link', 'Anchor F&B tenants', 'Approved façade works', '99-year leasehold'],
+    seller: { name: 'Rachel Tan', agency: 'Lion City Commercial', initials: 'RT', responseTime: '~20 min', isVerifiedAgent: true },
+    listedDaysAgo: 2,
+    isVerifiedListing: true,
+    coordinates: { lat: 1.3, lng: 103.84 },
   },
 ]
 
@@ -1019,12 +1170,30 @@ function Hero({ onNavigate, onBrowseCategory }: { onNavigate: (id: string) => vo
 
 type MarketplaceView = 'grid' | 'map'
 
-// Continental US bounds used to project listing coordinates onto the map preview.
-const MAP_BOUNDS = { minLat: 24, maxLat: 50, minLng: -125, maxLng: -66 }
+type MapBounds = { minLat: number; maxLat: number; minLng: number; maxLng: number }
 
-function projectToMap({ lat, lng }: { lat: number; lng: number }) {
-  const x = ((lng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng)) * 100
-  const y = ((MAP_BOUNDS.maxLat - lat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * 100
+// Fit the map preview to whatever listings are visible, so one city, one country or the whole globe all read well.
+function fitMapBounds(points: { lat: number; lng: number }[]): MapBounds {
+  if (points.length === 0) return { minLat: -60, maxLat: 75, minLng: -180, maxLng: 180 }
+  const lats = points.map((p) => p.lat)
+  const lngs = points.map((p) => p.lng)
+  let minLat = Math.min(...lats)
+  let maxLat = Math.max(...lats)
+  let minLng = Math.min(...lngs)
+  let maxLng = Math.max(...lngs)
+  // Keep a minimum span so single-city results don't collapse onto one point.
+  const latPad = Math.max((maxLat - minLat) * 0.15, 2)
+  const lngPad = Math.max((maxLng - minLng) * 0.15, 3)
+  minLat -= latPad
+  maxLat += latPad
+  minLng -= lngPad
+  maxLng += lngPad
+  return { minLat, maxLat, minLng, maxLng }
+}
+
+function projectToMap({ lat, lng }: { lat: number; lng: number }, bounds: MapBounds) {
+  const x = ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100
+  const y = ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100
   return { x: Math.max(4, Math.min(96, x)), y: Math.max(6, Math.min(94, y)) }
 }
 
@@ -1169,6 +1338,7 @@ function MapPreview({
   onInquire: (l: Listing) => void
 }) {
   const [activeId, setActiveId] = useState<string>(listings[0]?.id ?? '')
+  const bounds = useMemo(() => fitMapBounds(listings.map((l) => l.coordinates)), [listings])
   const active = listings.find((l) => l.id === activeId) ?? listings[0]
   if (!active) return null
 
@@ -1208,7 +1378,7 @@ function MapPreview({
         </span>
 
         {listings.map((l) => {
-          const { x, y } = projectToMap(l.coordinates)
+          const { x, y } = projectToMap(l.coordinates, bounds)
           const isActive = l.id === activeId
           return (
             <button
@@ -1278,12 +1448,71 @@ function MapPreview({
   )
 }
 
-function CategoryFilterBar({ value, onChange }: { value: MarketFilter; onChange: (v: MarketFilter) => void }) {
+function MarketSearchBar({
+  query,
+  onQueryChange,
+  country,
+  onCountryChange,
+}: {
+  query: string
+  onQueryChange: (v: string) => void
+  country: CountryFilter
+  onCountryChange: (v: CountryFilter) => void
+}) {
+  const id = useId()
+  return (
+    <form
+      role="search"
+      onSubmit={(e) => e.preventDefault()}
+      className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-ink-800/80 p-2 sm:flex-row sm:items-center"
+    >
+      <label htmlFor={`${id}-q`} className="sr-only">Search listings</label>
+      <div className="relative min-w-0 flex-1">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <input
+          id={`${id}-q`}
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search towers, vehicles, equipment, cities…"
+          className="w-full rounded-xl bg-ink-700 py-2.5 pl-9 pr-3 text-base text-white placeholder:text-slate-500 outline-none ring-accent-indigo/50 focus:ring-2 sm:text-sm"
+        />
+      </div>
+      <label htmlFor={`${id}-country`} className="sr-only">Country</label>
+      <div className="relative w-full sm:w-64 sm:shrink-0">
+        <MapPin aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-accent-indigo-light" />
+        {/* Native select: iOS/iPadOS and Android render it as a scrollable picker sheet; desktop gets a scrollable list. */}
+        <select
+          id={`${id}-country`}
+          value={country}
+          onChange={(e) => onCountryChange(e.target.value as CountryFilter)}
+          className="w-full max-w-full appearance-none truncate rounded-xl bg-ink-700 py-2.5 pl-9 pr-9 text-base text-white outline-none ring-accent-indigo/50 focus:ring-2 sm:text-sm"
+        >
+          <option value="all">🌐 All Countries (Global)</option>
+          {COUNTRY_GROUPS.map((g) => (
+            <optgroup key={g.region} label={`— ${g.region} —`}>
+              {g.countries.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.flag} {c.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </div>
+    </form>
+  )
+}
+
+function CategoryFilterBar({ value, onChange, pool }: { value: MarketFilter; onChange: (v: MarketFilter) => void; pool: Listing[] }) {
   return (
     <div role="tablist" aria-label="Marketplace categories" className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none]">
       {MARKET_CATEGORIES.map((c) => {
         const Icon = MARKET_CATEGORY_ICONS[c.value]
-        const count = c.value === 'all' ? LISTINGS.length : LISTINGS.filter((l) => l.marketCategory === c.value).length
+        const count = c.value === 'all' ? pool.length : pool.filter((l) => l.marketCategory === c.value).length
         const selected = value === c.value
         return (
           <button
@@ -1314,16 +1543,31 @@ function Marketplace({ filter, onFilterChange }: { filter: MarketFilter; onFilte
   const [inquiryListing, setInquiryListing] = useState<Listing | null>(null)
   const [view, setView] = useState<MarketplaceView>('grid')
 
+  const [query, setQuery] = useState('')
+  const [country, setCountry] = useState<CountryFilter>('all')
+
+  // Listings matching the search bar (keyword + country), before the category tabs are applied.
+  const pool = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return LISTINGS.filter((l) => {
+      if (country !== 'all' && l.country !== country) return false
+      if (!q) return true
+      return [l.title, l.location, l.subcategory, countryLabel(l.country), ...l.specs].some((t) => t.toLowerCase().includes(q))
+    })
+  }, [query, country])
+
   const visible = useMemo(
     () =>
       filter === 'all'
-        ? LISTINGS
-        : LISTINGS.filter((l) => l.marketCategory === filter)
+        ? pool
+        : pool
+            .filter((l) => l.marketCategory === filter)
             // Verified Seller subscribers get priority placement inside category filters.
             .sort((a, b) => Number(b.seller.plan === 'verified-seller') - Number(a.seller.plan === 'verified-seller')),
-    [filter],
+    [filter, pool],
   )
   const filterLabel = MARKET_CATEGORIES.find((c) => c.value === filter)?.label ?? 'All Items'
+  const scopeLabel = country === 'all' ? 'all countries' : countryLabel(country)
 
   return (
     <section id="marketplace" className="scroll-mt-16 bg-ink-900 py-24">
@@ -1339,18 +1583,23 @@ function Marketplace({ filter, onFilterChange }: { filter: MarketFilter; onFilte
         </div>
 
         <div className="sticky top-16 z-30 -mx-6 mt-6 border-b border-white/5 bg-ink-900/85 px-6 py-3 backdrop-blur-xl">
-          <CategoryFilterBar value={filter} onChange={onFilterChange} />
+          <MarketSearchBar query={query} onQueryChange={setQuery} country={country} onCountryChange={setCountry} />
+          <div className="mt-3">
+            <CategoryFilterBar value={filter} onChange={onFilterChange} pool={pool} />
+          </div>
         </div>
 
         <p className="mt-4 text-xs text-slate-500" aria-live="polite">
-          Showing {visible.length} {visible.length === 1 ? 'item' : 'items'} in {filterLabel}
+          Showing {visible.length} {visible.length === 1 ? 'item' : 'items'} in {filterLabel} · {scopeLabel}
         </p>
 
         <div className="mt-4">
           {visible.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center">
-              <p className="font-semibold text-white">No items in {filterLabel} yet</p>
-              <p className="mt-1 text-sm text-slate-400">Be the first to post here.</p>
+              <p className="font-semibold text-white">No items in {filterLabel} for {scopeLabel} yet</p>
+              <p className="mt-1 text-sm text-slate-400">
+                Try another country or choose All Countries (Global) — or be the first to post here.
+              </p>
             </div>
           ) : view === 'grid' ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -1360,7 +1609,7 @@ function Marketplace({ filter, onFilterChange }: { filter: MarketFilter; onFilte
             </div>
           ) : (
             // Remount on filter change so the selected pin resets to a visible listing.
-            <MapPreview key={filter} listings={visible} onView={setSelectedListing} onInquire={setInquiryListing} />
+            <MapPreview key={`${filter}-${country}-${query}`} listings={visible} onView={setSelectedListing} onInquire={setInquiryListing} />
           )}
         </div>
       </div>
