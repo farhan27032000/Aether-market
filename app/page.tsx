@@ -3,7 +3,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Car, Cpu, Factory, Tag } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Phone, Car, Cpu, Factory, Tag } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // utils
@@ -45,6 +45,10 @@ interface Seller {
   initials: string
   responseTime: string
   isVerifiedAgent?: boolean
+  /** Seller subscribes to the $15/month Verified Seller plan. */
+  plan?: 'verified-seller'
+  /** Public business phone, shown as a Call button for Verified Seller subscribers. */
+  phone?: string
 }
 
 interface Listing {
@@ -223,9 +227,69 @@ const LISTINGS: Listing[] = [
     description:
       'Commercial photographer for listings, dealerships, and online stores. Packages include lighting setup, retouching, and AI-ready raw files for the Aether Enhancer Studio.',
     features: ['Licensed drone pilot', 'Retouching included', 'Commercial usage rights', '48-hour delivery'],
-    seller: { name: 'Elena Ruiz', agency: 'Sonoran Visual Co.', initials: 'ER', responseTime: '~30 min', isVerifiedAgent: true },
+    seller: {
+      name: 'Elena Ruiz',
+      agency: 'Sonoran Visual Co.',
+      initials: 'ER',
+      responseTime: '~30 min',
+      isVerifiedAgent: true,
+      plan: 'verified-seller',
+      phone: '+1 (602) 555-0148',
+    },
     listedDaysAgo: 5,
     coordinates: { lat: 33.45, lng: -112.07 },
+  },
+  {
+    id: 'licensed-electrician',
+    title: 'Licensed Electrician & Generator Installs',
+    location: 'Denver, CO',
+    marketCategory: 'services',
+    subcategory: 'Contractor Service',
+    condition: 'Booking next 48 hrs',
+    price: '$95',
+    priceNote: '/ hr',
+    specs: ['Master licensed', 'Insured to $2M', 'Emergency call-outs'],
+    image: 'https://images.unsplash.com/photo-1621905251918-48416bd8575a?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Residential and light-commercial electrical work: panel upgrades, EV chargers, standby generator installs, and code-compliance inspections. Free on-site quotes across the Denver metro.',
+    features: ['Free on-site quotes', 'Panel & EV charger upgrades', 'Standby generator installs', '1-year workmanship warranty'],
+    seller: {
+      name: 'Tyrone Brooks',
+      agency: 'Brooks Electric LLC',
+      initials: 'TB',
+      responseTime: '~10 min',
+      isVerifiedAgent: true,
+      plan: 'verified-seller',
+      phone: '+1 (303) 555-0172',
+    },
+    listedDaysAgo: 1,
+    coordinates: { lat: 39.74, lng: -104.99 },
+  },
+  {
+    id: 'refurbished-macbook',
+    title: 'Refurbished MacBook Pro 14" (M3 Pro)',
+    location: 'Chicago, IL',
+    marketCategory: 'electronics',
+    subcategory: 'Retail · Independent Shop',
+    condition: 'Shop Refurbished',
+    price: '$1,649',
+    specs: ['18GB RAM', '512GB SSD', '6-month shop warranty'],
+    image: 'https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Graded A refurbished by our in-store technicians with a new battery and full diagnostics. Walk-in pickup at our Wicker Park shop or same-day local delivery.',
+    features: ['New battery fitted', 'Full diagnostics report', 'Walk-in pickup', 'Same-day local delivery'],
+    seller: {
+      name: 'Sofia Marino',
+      agency: 'Wicker Park Tech Repair',
+      initials: 'SM',
+      responseTime: '~5 min',
+      isVerifiedAgent: true,
+      plan: 'verified-seller',
+      phone: '+1 (312) 555-0119',
+    },
+    listedDaysAgo: 2,
+    isVerifiedListing: true,
+    coordinates: { lat: 41.91, lng: -87.68 },
   },
 ]
 
@@ -639,15 +703,44 @@ function VerifiedListingBadge({ className }: { className?: string }) {
   )
 }
 
-function VerifiedSellerBadge() {
+/** Official blue/green checkmark used for Verified Seller subscribers. */
+function VerifiedCheckIcon({ className }: { className?: string }) {
+  const gradientId = useId()
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={cn('h-4 w-4 shrink-0', className)}>
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#3b82f6" />
+          <stop offset="100%" stopColor="#10b981" />
+        </linearGradient>
+      </defs>
+      {/* Scalloped seal */}
+      <path
+        fill={`url(#${gradientId})`}
+        d="M12 1.5l2.39 1.74 2.95-.07.9 2.81 2.39 1.74-.9 2.81.9 2.81-2.39 1.74-.9 2.81-2.95-.07L12 19.5l-2.39-1.74-2.95.07-.9-2.81-2.39-1.74.9-2.81-.9-2.81 2.39-1.74.9-2.81 2.95.07z"
+        transform="translate(0 1.5)"
+      />
+      <path d="M8 12.6l2.6 2.6L16.2 9.6" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function VerifiedSellerBadge({ className }: { className?: string }) {
   return (
     <span
-      title="Identity and business documents verified"
-      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-indigo/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-indigo-light"
+      title="Verified Seller: identity and business documents checked by Aether Market"
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-400/30 bg-gradient-to-r from-sky-500/15 to-accent-emerald/15 py-0.5 pl-0.5 pr-2 text-[10px] font-semibold uppercase tracking-wide text-sky-200',
+        className,
+      )}
     >
-      <BadgeCheck className="h-3 w-3" /> Verified Seller
+      <VerifiedCheckIcon /> Verified Seller
     </span>
   )
+}
+
+function telHref(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`
 }
 
 /** Before/after slider for AI-enhanced listings, otherwise the single listing photo. */
@@ -817,7 +910,7 @@ function PropertyDetailModal({ listing, onClose }: { listing: Listing; onClose: 
             <div className="flex-1">
               <div className="flex items-center gap-1.5">
                 <p className="text-sm font-semibold text-white">{listing.seller.name}</p>
-                {listing.seller.isVerifiedAgent && <BadgeCheck className="h-4 w-4 text-accent-emerald" aria-label="Verified Broker" />}
+                {listing.seller.isVerifiedAgent && <VerifiedSellerBadge />}
               </div>
               <p className="text-xs text-slate-400">{listing.seller.agency}</p>
             </div>
@@ -862,10 +955,13 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
         </button>
         <div className="flex items-center gap-4">
           <button
+            type="button"
             onClick={onOpenVerify}
-            className="flex items-center gap-1 rounded-lg border border-accent-indigo/30 bg-accent-indigo/10 px-3 py-1.5 text-xs font-semibold text-accent-indigo-light transition hover:bg-accent-indigo/20"
+            aria-haspopup="dialog"
+            className="flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-gradient-to-r from-sky-500/10 to-accent-emerald/10 px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:from-sky-500/20 hover:to-accent-emerald/20"
           >
-            <ShieldCheck className="h-4 w-4" /> Verify Seller
+            <VerifiedCheckIcon className="h-4 w-4" /> Verify Seller
+            <span className="hidden rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white sm:inline">$15/mo</span>
           </button>
           <button onClick={() => onNavigate('staging-studio')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
             Post an Ad
@@ -974,7 +1070,13 @@ function ListingCard({ listing, onView, onInquire }: { listing: Listing; onView:
           <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             <CategoryIcon className="h-3.5 w-3.5 shrink-0" /> {listing.subcategory}
           </span>
-          {listing.isVerifiedListing && <VerifiedListingBadge />}
+          {listing.seller.plan === 'verified-seller' ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+              <Zap className="h-3 w-3" /> Priority
+            </span>
+          ) : (
+            listing.isVerifiedListing && <VerifiedListingBadge />
+          )}
         </div>
         <h3 className="mt-2 font-semibold text-white">{listing.title}</h3>
 
@@ -1008,6 +1110,28 @@ function ListingCard({ listing, onView, onInquire }: { listing: Listing; onView:
           </span>
           {listing.seller.isVerifiedAgent && <VerifiedSellerBadge />}
         </div>
+
+        {listing.seller.plan === 'verified-seller' && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <a
+              href={buildWhatsAppUrl(`Hi ${listing.seller.name.split(' ')[0]}, I found "${listing.title}" on Aether Market. Is it still available?`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366]/15 py-2 text-xs font-semibold text-[#5ee391] transition hover:bg-[#25D366] hover:text-ink-900"
+            >
+              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+            </a>
+            {listing.seller.phone && (
+              <a
+                href={telHref(listing.seller.phone)}
+                aria-label={`Call ${listing.seller.agency} at ${listing.seller.phone}`}
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-500 hover:text-white"
+              >
+                <Phone className="h-3.5 w-3.5" /> Call
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="mt-auto pt-4">
         <div className="flex items-center justify-between gap-2 border-t border-white/5 pt-3">
@@ -1191,7 +1315,12 @@ function Marketplace({ filter, onFilterChange }: { filter: MarketFilter; onFilte
   const [view, setView] = useState<MarketplaceView>('grid')
 
   const visible = useMemo(
-    () => (filter === 'all' ? LISTINGS : LISTINGS.filter((l) => l.marketCategory === filter)),
+    () =>
+      filter === 'all'
+        ? LISTINGS
+        : LISTINGS.filter((l) => l.marketCategory === filter)
+            // Verified Seller subscribers get priority placement inside category filters.
+            .sort((a, b) => Number(b.seller.plan === 'verified-seller') - Number(a.seller.plan === 'verified-seller')),
     [filter],
   )
   const filterLabel = MARKET_CATEGORIES.find((c) => c.value === filter)?.label ?? 'All Items'
@@ -1657,7 +1786,7 @@ function StageForm() {
 // Pricing
 // ---------------------------------------------------------------------------
 
-type PricingPlanId = 'free-listing' | 'single-listing' | 'pro-subscription'
+type PricingPlanId = 'free-listing' | 'single-listing' | 'verified-seller' | 'pro-subscription'
 
 type PricingPlan = {
   id: PricingPlanId
@@ -1707,6 +1836,21 @@ const PRICING_PLANS: PricingPlan[] = [
     checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_SINGLE_LISTING_URL,
   },
   {
+    id: 'verified-seller',
+    name: 'Verified Seller',
+    price: '$15',
+    period: '/ month',
+    description: 'Designed for local service providers, contractors, and independent shop owners.',
+    features: [
+      'Official Verified Seller Blue/Green Checkmark Badge on all listings',
+      'Unlimited Service & Business Ads',
+      'Direct WhatsApp & Call buttons on listing cards',
+      'Priority in search & service filters',
+    ],
+    cta: 'Get Verified ($15/mo)',
+    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_VERIFIED_SELLER_URL,
+  },
+  {
     id: 'pro-subscription',
     name: 'Pro Subscription',
     price: '$99',
@@ -1725,6 +1869,129 @@ const PRICING_PLANS: PricingPlan[] = [
 ]
 
 type CheckoutStatus = 'redirecting' | 'unavailable' | 'error'
+
+const VERIFIED_SELLER_PLAN = PRICING_PLANS.find((p) => p.id === 'verified-seller') as PricingPlan
+
+/**
+ * Verified Seller ($15/month) sign-up and checkout. Opened from the header
+ * "Verify Seller" button and the pricing card. Hands off to the Stripe Payment
+ * Link in NEXT_PUBLIC_STRIPE_VERIFIED_SELLER_URL when it is configured.
+ */
+function VerifiedSellerModal({ onClose, onUploadDocuments }: { onClose: () => void; onUploadDocuments: () => void }) {
+  const plan = VERIFIED_SELLER_PLAN
+  const [status, setStatus] = useState<'review' | CheckoutStatus>('review')
+
+  useEffect(() => {
+    if (status !== 'redirecting') return
+    const timer = window.setTimeout(() => {
+      if (plan.checkoutUrl) {
+        try {
+          window.location.href = plan.checkoutUrl
+        } catch {
+          setStatus('error')
+        }
+        return
+      }
+      setStatus('unavailable')
+    }, 1500)
+    return () => window.clearTimeout(timer)
+  }, [status, plan.checkoutUrl])
+
+  return (
+    <Modal title="Become a Verified Seller" onClose={onClose} className="sm:max-w-md">
+      <div className="space-y-5 p-6">
+        <div className="flex items-center gap-4 rounded-xl border border-sky-400/30 bg-gradient-to-br from-sky-500/15 via-transparent to-accent-emerald/15 p-4">
+          <VerifiedCheckIcon className="h-11 w-11" />
+          <div className="min-w-0">
+            <p className="font-semibold text-white">{plan.name}</p>
+            <p className="text-sm text-slate-400">
+              <span className="font-display text-lg font-bold text-white">{plan.price}</span> {plan.period} · cancel anytime
+            </p>
+          </div>
+        </div>
+        <p className="text-sm text-slate-400">{plan.description}</p>
+
+        <ul className="space-y-2.5">
+          {plan.features.map((feature) => (
+            <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-300">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent-emerald-light" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        {/* Live preview of what buyers see */}
+        <div className="rounded-xl border border-white/5 bg-ink-900/60 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">How buyers see your listings</p>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-accent-emerald text-[11px] font-bold text-white">
+              YB
+            </span>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-200">Your Business</span>
+            <VerifiedSellerBadge />
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs font-semibold" aria-hidden="true">
+            <span className="flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366]/15 py-1.5 text-[#5ee391]">
+              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+            </span>
+            <span className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/15 py-1.5 text-sky-200">
+              <Phone className="h-3.5 w-3.5" /> Call
+            </span>
+          </div>
+        </div>
+
+        {status !== 'review' && (
+          <div role="status" aria-live="polite" className="rounded-xl border border-white/5 bg-ink-900/60 p-4">
+            {status === 'redirecting' && (
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin text-sky-300" />
+                <p className="text-sm font-semibold text-white">Redirecting to secure checkout...</p>
+              </div>
+            )}
+            {status === 'unavailable' && (
+              <div className="flex items-start gap-3">
+                <Lock className="mt-0.5 h-5 w-5 shrink-0 text-accent-emerald-light" />
+                <div>
+                  <p className="text-sm font-semibold text-white">Online checkout is launching soon</p>
+                  <p className="text-xs text-slate-400">
+                    You can submit your verification documents now and we&apos;ll activate billing once checkout opens.
+                  </p>
+                </div>
+              </div>
+            )}
+            {status === 'error' && (
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                <p className="text-sm font-semibold text-white">We couldn&apos;t start checkout. Please try again.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setStatus('redirecting')}
+          disabled={status === 'redirecting'}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-accent-emerald py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110 disabled:opacity-60"
+        >
+          {status === 'redirecting' ? <Loader2 className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />}
+          {status === 'unavailable' || status === 'error' ? 'Try Checkout Again' : `${plan.cta} `}
+          <ArrowRight className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onUploadDocuments}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+        >
+          <ShieldCheck className="h-4 w-4" /> Submit Verification Documents
+        </button>
+        <p className="text-center text-[11px] text-slate-500">
+          Badge is issued after your ID or business documents are reviewed, usually within 24 hours.
+        </p>
+      </div>
+    </Modal>
+  )
+}
 
 const AD_DURATION_SECONDS = 15
 
@@ -2015,8 +2282,11 @@ function StagingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => 
 function Pricing({
   onNavigate,
   onSelectPlan,
+  onGetVerified,
 }: {
   onNavigate: (id: string) => void
+  /** Opens the shared Verified Seller ($15/month) checkout modal. */
+  onGetVerified: () => void
   /** Override to call a Stripe Checkout API endpoint, track analytics, etc. */
   onSelectPlan?: (plan: PricingPlan) => void | Promise<void>
 }) {
@@ -2036,11 +2306,16 @@ function Pricing({
   // - Free Listing: play a simulated video ad, then go to the studio to publish.
   // - Single Listing: smoothly scroll to the AI Staging & Architectural Studio
   //   so the visitor can upload and stage an individual photo.
+  // - Verified Seller: open the $15/month Verified Seller checkout modal.
   // - Pro Subscription: open the Pro agency setup modal, which hands off to
   //   Stripe checkout once it is configured.
   const handlePlanClick = (plan: PricingPlan) => {
     if (plan.id === 'free-listing') {
       setAdModalOpen(true)
+      return
+    }
+    if (plan.id === 'verified-seller') {
+      onGetVerified()
       return
     }
     if (plan.id === 'pro-subscription') {
@@ -2058,12 +2333,12 @@ function Pricing({
             <CreditCard className="h-3.5 w-3.5" /> Pricing & Packages
           </span>
           <h2 className="mt-4 font-display text-3xl font-bold text-white sm:text-4xl">Simple, transparent pricing</h2>
-          <p className="mt-3 text-slate-400">Start free, pay per listing, or scale with Pro. No hidden fees.</p>
+          <p className="mt-3 text-slate-400">Start free, pay per listing, get verified as a local business, or scale with Pro. No hidden fees.</p>
         </div>
 
         <StagingSavingsCalculator onNavigate={onNavigate} />
 
-        <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-3">
+        <div className="mx-auto mt-12 grid max-w-7xl gap-6 md:grid-cols-2 xl:grid-cols-4">
           {PRICING_PLANS.map((plan) => (
             <div
               key={plan.name}
@@ -2071,16 +2346,26 @@ function Pricing({
                 'relative flex flex-col rounded-2xl border p-6 transition lg:p-8',
                 plan.popular
                   ? 'border-accent-indigo/50 bg-gradient-to-b from-accent-indigo/15 to-ink-800/80 shadow-2xl shadow-accent-indigo/20'
-                  : 'border-white/5 bg-ink-800/60 hover:border-white/10',
+                  : plan.id === 'verified-seller'
+                    ? 'border-sky-400/40 bg-gradient-to-b from-sky-500/10 via-ink-800/80 to-accent-emerald/10 shadow-xl shadow-sky-500/10'
+                    : 'border-white/5 bg-ink-800/60 hover:border-white/10',
               )}
             >
+              {plan.id === 'verified-seller' && (
+                <span className="absolute -top-3 right-6 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-sky-500 to-accent-emerald px-3 py-1 text-xs font-semibold text-white shadow-lg">
+                  <Briefcase className="h-3 w-3" /> Local Businesses
+                </span>
+              )}
               {plan.popular && (
                 <span className="absolute -top-3 right-6 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-accent-indigo to-accent-emerald px-3 py-1 text-xs font-semibold text-white shadow-lg">
                   <Star className="h-3 w-3 fill-current" /> Popular
                 </span>
               )}
 
-              <h3 className="font-display text-xl font-bold text-white">{plan.name}</h3>
+              <h3 className="flex items-center gap-2 font-display text-xl font-bold text-white">
+                {plan.name}
+                {plan.id === 'verified-seller' && <VerifiedCheckIcon className="h-5 w-5" />}
+              </h3>
               <p className="mt-2 text-sm text-slate-400">{plan.description}</p>
 
               <div className="mt-6 flex items-baseline gap-2">
@@ -2096,7 +2381,9 @@ function Pricing({
                         'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
                         plan.popular
                           ? 'bg-accent-indigo/20 text-accent-indigo-light'
-                          : plan.id === 'free-listing'
+                          : plan.id === 'verified-seller'
+                            ? 'bg-sky-500/15 text-sky-300'
+                            : plan.id === 'free-listing'
                             ? 'bg-white/10 text-slate-300'
                             : 'bg-accent-emerald/15 text-accent-emerald-light',
                       )}
@@ -2117,7 +2404,9 @@ function Pricing({
                   'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition',
                   plan.popular
                     ? 'bg-accent-indigo text-white hover:bg-accent-indigo-light hover:text-ink-900'
-                    : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
+                    : plan.id === 'verified-seller'
+                      ? 'bg-gradient-to-r from-sky-500 to-accent-emerald text-white shadow-lg hover:brightness-110'
+                      : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
                 )}
               >
                 {plan.cta} <ArrowRight className="h-4 w-4" />
@@ -2149,12 +2438,22 @@ function Pricing({
 
 export default function App() {
   const [verifyModalOpen, setVerifyModalOpen] = useState(false)
+  const [verifiedSellerOpen, setVerifiedSellerOpen] = useState(false)
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all')
   const navigate = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
+  // Close the Verified Seller checkout if the visitor returns from Stripe via the back button.
+  useEffect(() => {
+    const reset = (e: PageTransitionEvent) => {
+      if (e.persisted) setVerifiedSellerOpen(false)
+    }
+    window.addEventListener('pageshow', reset)
+    return () => window.removeEventListener('pageshow', reset)
+  }, [])
+
   return (
     <div className="min-h-screen bg-ink-900 text-slate-200">
-      <Navbar onNavigate={navigate} onOpenVerify={() => setVerifyModalOpen(true)} />
+      <Navbar onNavigate={navigate} onOpenVerify={() => setVerifiedSellerOpen(true)} />
       <main>
         <Hero
           onNavigate={navigate}
@@ -2165,8 +2464,17 @@ export default function App() {
         />
         <Marketplace filter={marketFilter} onFilterChange={setMarketFilter} />
         <StageForm />
-        <Pricing onNavigate={navigate} />
+        <Pricing onNavigate={navigate} onGetVerified={() => setVerifiedSellerOpen(true)} />
       </main>
+      {verifiedSellerOpen && (
+        <VerifiedSellerModal
+          onClose={() => setVerifiedSellerOpen(false)}
+          onUploadDocuments={() => {
+            setVerifiedSellerOpen(false)
+            setVerifyModalOpen(true)
+          }}
+        />
+      )}
       {verifyModalOpen && <SellerVerificationModal onClose={() => setVerifyModalOpen(false)} />}
     </div>
   )
