@@ -454,20 +454,14 @@ const LISTINGS: Listing[] = [
 
 /** Row shape of the Supabase `listings` table (see supabase/listings.sql). */
 interface ListingRow {
-  id: string | number
+  id: string
   title: string
-  location: string | null
-  country: string | null
-  market_category: string | null
-  subcategory: string | null
-  condition: string | null
-  price: string | null
   description: string | null
+  price_usd: number | null
+  country: string | null
+  city: string | null
+  category: string | null
   image_url: string | null
-  seller_name: string | null
-  seller_phone: string | null
-  latitude: number | null
-  longitude: number | null
   created_at: string | null
 }
 
@@ -518,33 +512,29 @@ function initialsOf(name: string) {
     .join('')
 }
 
+const listingPriceFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+
 function rowToListing(row: ListingRow): Listing {
   const country = isCountryCode(row.country) ? row.country : 'US'
-  const sellerName = row.seller_name?.trim() || 'Aether Seller'
+  const marketCategory = isMarketCategory(row.category) ? row.category : 'services'
   const createdAt = row.created_at ? new Date(row.created_at).getTime() : Date.now()
+  const sellerName = 'Aether Seller'
   return {
     id: `db-${row.id}`,
     title: row.title,
-    location: row.location?.trim() || countryLabel(country),
+    location: row.city?.trim() ? `${row.city.trim()}, ${countryLabel(country)}` : countryLabel(country),
     country,
-    marketCategory: isMarketCategory(row.market_category) ? row.market_category : 'services',
-    subcategory: row.subcategory?.trim() || 'Direct Listing',
-    condition: row.condition?.trim() || 'Original photo',
-    price: row.price?.trim() || 'Price on request',
+    marketCategory,
+    subcategory: MARKET_CATEGORIES.find((c) => c.value === marketCategory)?.label ?? 'Direct Listing',
+    condition: 'Original photo',
+    price: row.price_usd != null ? listingPriceFormat.format(row.price_usd) : 'Price on request',
     specs: [],
     image: row.image_url || LISTING_PLACEHOLDER_IMAGE,
     description: row.description ?? '',
     features: [],
-    seller: {
-      name: sellerName,
-      agency: 'Independent Seller',
-      initials: initialsOf(sellerName) || 'AS',
-      responseTime: '~1 hr',
-      phone: row.seller_phone || undefined,
-    },
+    seller: { name: sellerName, agency: 'Independent Seller', initials: initialsOf(sellerName), responseTime: '~1 hr' },
     listedDaysAgo: Math.max(0, Math.floor((Date.now() - createdAt) / 86_400_000)),
-    coordinates:
-      row.latitude != null && row.longitude != null ? { lat: row.latitude, lng: row.longitude } : COUNTRY_CENTERS[country],
+    coordinates: COUNTRY_CENTERS[country],
   }
 }
 
@@ -2350,11 +2340,9 @@ function PublishDirectModal({
   const [title, setTitle] = useState('')
   const [price, setPrice] = useState('')
   const [country, setCountry] = useState<CountryCode>('US')
-  const [location, setLocation] = useState('')
+  const [city, setCity] = useState('')
   const [category, setCategory] = useState<MarketCategory>(defaultCategory)
   const [description, setDescription] = useState('')
-  const [sellerName, setSellerName] = useState('')
-  const [sellerPhone, setSellerPhone] = useState('')
   const [status, setStatus] = useState<'idle' | 'publishing' | 'published'>('idle')
   const [error, setError] = useState<string | null>(null)
   const formId = useId()
@@ -2368,18 +2356,12 @@ function PublishDirectModal({
     const imageUrl = await uploadListingImage(file)
     const row: NewListingRow = {
       title: title.trim(),
-      location: location.trim() || null,
-      country,
-      market_category: category,
-      subcategory: MARKET_CATEGORIES.find((c) => c.value === category)?.label ?? null,
-      condition: 'Original photo',
-      price: price.trim() || null,
       description: description.trim() || null,
+      price_usd: price.trim() ? Number(price) : null,
+      country,
+      city: city.trim() || null,
+      category,
       image_url: imageUrl,
-      seller_name: sellerName.trim() || null,
-      seller_phone: sellerPhone.trim() || null,
-      latitude: null,
-      longitude: null,
     }
 
     const { data, error: insertError } = await supabase.from('listings').insert(row).select().single()
@@ -2433,8 +2415,8 @@ function PublishDirectModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor={`${formId}-price`} className={labelClass}>Price</label>
-              <input id={`${formId}-price`} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. $1,200" className={inputClass} />
+              <label htmlFor={`${formId}-price`} className={labelClass}>Price (USD)</label>
+              <input id={`${formId}-price`} type="number" min={0} step="any" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 1200" className={inputClass} />
             </div>
             <div>
               <label htmlFor={`${formId}-category`} className={labelClass}>Category</label>
@@ -2460,25 +2442,14 @@ function PublishDirectModal({
               </select>
             </div>
             <div>
-              <label htmlFor={`${formId}-location`} className={labelClass}>City / Area</label>
-              <input id={`${formId}-location`} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Dubai Marina" className={inputClass} />
+              <label htmlFor={`${formId}-city`} className={labelClass}>City / Area</label>
+              <input id={`${formId}-city`} value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Dubai Marina" className={inputClass} />
             </div>
           </div>
 
           <div>
             <label htmlFor={`${formId}-description`} className={labelClass}>Description</label>
             <textarea id={`${formId}-description`} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor={`${formId}-seller`} className={labelClass}>Your Name</label>
-              <input id={`${formId}-seller`} value={sellerName} onChange={(e) => setSellerName(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label htmlFor={`${formId}-phone`} className={labelClass}>Phone (optional)</label>
-              <input id={`${formId}-phone`} type="tel" value={sellerPhone} onChange={(e) => setSellerPhone(e.target.value)} className={inputClass} />
-            </div>
           </div>
 
           {error && (
