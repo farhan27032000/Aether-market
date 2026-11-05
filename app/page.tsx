@@ -634,7 +634,7 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
           >
             <ShieldCheck className="h-4 w-4" /> Verify Agency
           </button>
-          <button onClick={() => onNavigate('stage')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
+          <button onClick={() => onNavigate('staging-studio')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
             List a Property
           </button>
         </div>
@@ -657,7 +657,7 @@ function Hero({ onNavigate }: { onNavigate: (id: string) => void }) {
           Transform empty room photos or raw land plots into stunning architectural masterworks instantly.
         </p>
         <div className="mt-8 flex justify-center gap-4">
-          <button onClick={() => onNavigate('stage')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
+          <button onClick={() => onNavigate('staging-studio')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
             Stage a Property or Land
           </button>
           <button onClick={() => onNavigate('marketplace')} className="rounded-xl border border-white/10 px-6 py-3.5 font-semibold text-white">
@@ -706,29 +706,268 @@ function Marketplace() {
   )
 }
 
+type StudioMode = 'awaiting-choice' | 'generating' | 'staged' | 'direct'
+
 function StageForm() {
   const [category, setCategory] = useState<SpaceCategory>('Living Room')
   const [style, setStyle] = useState<StagingStyle>('Modern')
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [email, setEmail] = useState('')
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  // After upload the studio waits for the user to pick AI staging or a direct publish.
+  const [mode, setMode] = useState<StudioMode>('awaiting-choice')
+  const [generationRun, setGenerationRun] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputId = useId()
 
   const isLand = category === 'Raw Land / Plot' || category === 'Exterior & Lawn'
+  const categoryLabel = CATEGORIES.find((c) => c.value === category)?.label ?? category
+  const showUploadBox = !previewUrl || mode === 'awaiting-choice' || mode === 'generating'
+
+  // Release the object URL when it is replaced or the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  // Simulated AI generation, only runs when the user picks AI staging.
+  // Swap this timeout for a real staging API call.
+  useEffect(() => {
+    if (mode !== 'generating') return
+    const timer = window.setTimeout(() => setMode('staged'), 2500)
+    return () => window.clearTimeout(timer)
+  }, [mode, generationRun])
+
+  const stagedPreviewUrl = SAMPLE_RENDERS[category]
+
+  const selectFile = (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return
+    setPreviewUrl(URL.createObjectURL(file))
+    setFileName(file.name)
+    setMode('awaiting-choice')
+  }
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    selectFile(e.target.files?.[0])
+  }
+
+  const openFilePicker = () => fileInputRef.current?.click()
+
+  const clearFile = () => {
+    setPreviewUrl(null)
+    setFileName(null)
+    setMode('awaiting-choice')
+    // Reset so choosing the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const generateAiPreview = () => {
+    if (!previewUrl) return
+    setMode('generating')
+    setGenerationRun((n) => n + 1)
+  }
+
+  const publishDirect = () => {
+    if (!previewUrl) return
+    setMode('direct')
+  }
+
+  // Re-render the AI preview if the category or style changes after staging.
+  const restageIfNeeded = () => {
+    if (mode === 'staged' || mode === 'generating') generateAiPreview()
+  }
 
   const handleCategoryChange = (cat: SpaceCategory) => {
     setCategory(cat)
     setStyle(cat === 'Raw Land / Plot' || cat === 'Exterior & Lawn' ? 'Modern Luxury Villa' : 'Modern')
+    restageIfNeeded()
   }
 
+  const handleStyleChange = (next: StagingStyle) => {
+    setStyle(next)
+    restageIfNeeded()
+  }
+
+  const secondaryButton =
+    'flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:border-white/20 hover:bg-white/5'
+
   return (
-    <section id="stage" className="border-y border-white/5 bg-ink-800/40 py-24">
+    <section id="staging-studio" className="scroll-mt-16 border-y border-white/5 bg-ink-800/40 py-24">
       <div className="mx-auto max-w-4xl px-6 rounded-2xl border border-white/5 bg-ink-800/80 p-8">
         <h2 className="font-display text-2xl font-bold text-white">AI Staging & Architectural Studio</h2>
-        <p className="mt-1 text-xs text-slate-400">Upload a room or raw land plot photo to generate instant AI previews.</p>
+        <p className="mt-1 text-xs text-slate-400">
+          Upload a room or raw land plot photo, then generate an instant AI preview or publish your original photo directly.
+        </p>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          <div className="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/10 hover:border-accent-indigo/40">
-            <ImagePlus className="h-8 w-8 text-accent-indigo-light" />
-            <span className="mt-2 text-xs font-semibold text-white">{isLand ? 'Upload Raw Land Photo' : 'Upload Room Photo'}</span>
+          <div>
+            {/* AI result: before/after slider */}
+            {previewUrl && mode === 'staged' && (
+              <>
+                <BeforeAfterSlider
+                  beforeImage={previewUrl}
+                  afterImage={stagedPreviewUrl}
+                  beforeLabel="Original"
+                  afterLabel="AI Staged"
+                  alt={fileName ?? 'Uploaded photo'}
+                  className="border border-accent-indigo/30"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-1.5 text-xs text-accent-emerald-light">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> AI preview ready: {style}
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" onClick={openFilePicker} className={secondaryButton}>
+                      <RotateCcw className="h-3.5 w-3.5" /> Replace
+                    </button>
+                    <button type="button" onClick={clearFile} aria-label="Remove selected photo" className={cn(secondaryButton, 'px-2')}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Direct publish: original photo in the marketplace listing card layout */}
+            {previewUrl && mode === 'direct' && (
+              <>
+                <div className="rounded-2xl border border-white/5 bg-ink-800/60 p-4">
+                  <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-ink-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={previewUrl} alt={fileName ?? 'Original property photo'} className="h-full w-full object-cover" />
+                    <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-3 py-1 text-xs font-semibold text-slate-200 backdrop-blur">
+                      Original Photo · No AI
+                    </span>
+                  </div>
+                  <div className="mt-4">
+                    <h3 className="font-semibold text-white">{categoryLabel} Listing</h3>
+                    <p className="flex items-center gap-1 text-xs text-slate-400">
+                      <MapPin className="h-3 w-3" /> Location added at publish
+                    </p>
+                    <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3">
+                      <span className="font-display text-xl font-bold text-accent-emerald-light">Price on request</span>
+                      <span className="flex items-center gap-1 text-xs font-semibold text-accent-emerald-light">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Ready to publish
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <button type="button" onClick={generateAiPreview} className={secondaryButton}>
+                    <Wand2 className="h-3.5 w-3.5" /> Apply AI Staging Instead
+                  </button>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={openFilePicker} className={secondaryButton}>
+                      <RotateCcw className="h-3.5 w-3.5" /> Replace
+                    </button>
+                    <button type="button" onClick={clearFile} aria-label="Remove selected photo" className={cn(secondaryButton, 'px-2')}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Upload dropzone (also shows the photo while waiting for a choice) */}
+            <div className="relative" hidden={!showUploadBox}>
+              <label
+                htmlFor={fileInputId}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setIsDragging(true)
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setIsDragging(false)
+                  selectFile(e.dataTransfer.files?.[0])
+                }}
+                className={cn(
+                  'relative flex aspect-[4/3] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition focus-within:border-accent-indigo focus-within:ring-2 focus-within:ring-accent-indigo/40',
+                  previewUrl ? 'border-accent-indigo/40' : 'border-white/10 hover:border-accent-indigo/40',
+                  isDragging && 'border-accent-indigo bg-accent-indigo/10',
+                )}
+              >
+                <input
+                  ref={fileInputRef}
+                  id={fileInputId}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+                {previewUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={previewUrl} alt={fileName ?? 'Selected photo preview'} className="absolute inset-0 h-full w-full object-cover" />
+                    {mode === 'generating' ? (
+                      <span
+                        role="status"
+                        aria-live="polite"
+                        className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-900/75 backdrop-blur-sm"
+                      >
+                        <Loader2 className="h-8 w-8 animate-spin text-accent-indigo-light" />
+                        <span className="text-sm font-semibold text-white">Generating AI Staging Preview...</span>
+                        <span className="h-1 w-40 overflow-hidden rounded-full bg-white/10">
+                          <span className="block h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-accent-indigo to-accent-emerald" />
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 truncate bg-gradient-to-t from-ink-900/90 to-transparent px-3 pb-2 pt-6 text-xs font-semibold text-white">
+                        <RotateCcw className="h-3.5 w-3.5 shrink-0" /> Tap to replace photo
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="h-8 w-8 text-accent-indigo-light" />
+                    <span className="mt-2 text-xs font-semibold text-white">{isLand ? 'Upload Raw Land Photo' : 'Upload Room Photo'}</span>
+                    <span className="mt-1 text-[11px] text-slate-500">Tap, click, or drop an image</span>
+                  </>
+                )}
+              </label>
+              {previewUrl && mode !== 'generating' && (
+                <button
+                  type="button"
+                  onClick={clearFile}
+                  aria-label="Remove selected photo"
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-ink-900/80 text-white backdrop-blur transition hover:bg-ink-900"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* The two publishing choices */}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={generateAiPreview}
+                  disabled={!previewUrl || mode === 'generating'}
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-accent-indigo to-accent-emerald px-3 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
+                >
+                  {mode === 'generating' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  Generate Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={publishDirect}
+                  disabled={!previewUrl}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-ink-700/60 px-3 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-ink-700/60"
+                >
+                  <Send className="h-4 w-4" /> Publish Direct (No AI)
+                </button>
+              </div>
+              <p className="mt-2 text-center text-[11px] text-slate-500">
+                {previewUrl
+                  ? mode === 'generating'
+                    ? 'Staging your photo with AI. You can publish the original instead once it finishes.'
+                    : 'Choose AI staging, or publish your original photo as-is.'
+                  : 'Upload a photo to choose AI staging or a direct publish.'}
+              </p>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -749,21 +988,48 @@ function StageForm() {
               <label className="text-xs text-slate-300">{isLand ? 'Architectural Concept' : 'Staging Style'}</label>
               <select
                 value={style}
-                onChange={(e) => setStyle(e.target.value as StagingStyle)}
+                onChange={(e) => handleStyleChange(e.target.value as StagingStyle)}
                 className="mt-1 w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2 text-sm text-white"
               >
                 {(isLand ? ARCHITECTURAL_STYLES : INTERIOR_STYLES).map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-slate-500">Used for AI staging only. Direct publishing keeps your photo unchanged.</p>
             </div>
 
-            <button
-              onClick={() => setEmailModalOpen(true)}
-              className="w-full rounded-xl bg-gradient-to-r from-accent-emerald to-accent-emerald-light py-3 font-semibold text-ink-900 shadow-lg"
-            >
-              Generate Free Watermarked Preview
-            </button>
+            <div className="rounded-xl border border-white/5 bg-ink-900/50 p-4 text-xs text-slate-400">
+              <p className="font-semibold text-white">Two ways to publish</p>
+              <ul className="mt-2 space-y-2">
+                <li className="flex items-start gap-2">
+                  <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-indigo-light" />
+                  <span><span className="text-slate-200">Generate Preview</span> stages your photo with AI and shows a before & after slider.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-emerald-light" />
+                  <span><span className="text-slate-200">Publish Direct (No AI)</span> lists your original photo exactly as uploaded.</span>
+                </li>
+              </ul>
+            </div>
+
+            {mode === 'staged' && previewUrl && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setEmailModalOpen(true)}
+                  className="w-full rounded-xl bg-gradient-to-r from-accent-emerald to-accent-emerald-light py-3 font-semibold text-ink-900 shadow-lg"
+                >
+                  Email Me the Watermarked Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={publishDirect}
+                  className="w-full rounded-xl border border-white/10 py-2.5 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+                >
+                  Publish Original Instead (No AI)
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -796,6 +1062,402 @@ function StageForm() {
 }
 
 // ---------------------------------------------------------------------------
+// Pricing
+// ---------------------------------------------------------------------------
+
+type PricingPlanId = 'free-listing' | 'single-listing' | 'pro-subscription'
+
+type PricingPlan = {
+  id: PricingPlanId
+  name: string
+  price: string
+  period: string
+  description: string
+  features: string[]
+  cta: string
+  popular?: boolean
+  /**
+   * Optional Stripe Checkout / Payment Link URL. Set the matching
+   * NEXT_PUBLIC_* env var (Payment Links are public URLs) to go live,
+   * or replace `handleCheckout` below with a call to your own API endpoint.
+   */
+  checkoutUrl?: string
+}
+
+const PRICING_PLANS: PricingPlan[] = [
+  {
+    id: 'free-listing',
+    name: 'Free Listing',
+    price: '$0',
+    period: '/ listing',
+    description: 'Ideal for owners looking to test the marketplace.',
+    features: [
+      '1 Active Listing (30 Days)',
+      'Watch 1 short video ad to publish',
+      'Standard Photo Uploads',
+      'Watermarked Staging Preview',
+    ],
+    cta: 'Watch Ad & Publish',
+  },
+  {
+    id: 'single-listing',
+    name: 'Single Listing',
+    price: '$5',
+    period: '/ per listing',
+    description: 'Perfect for sellers wanting instant staging & longer exposure.',
+    features: [
+      '1 Active Listing (Stays active for 3 Months)',
+      'Before & After Interactive Staging',
+      'AI photo modification for future furnished outlook',
+      'HD Image Support (No Ads)',
+    ],
+    cta: 'Get Started',
+    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_SINGLE_LISTING_URL,
+  },
+  {
+    id: 'pro-subscription',
+    name: 'Pro Subscription',
+    price: '$99',
+    period: '/ month',
+    description: 'Built for agencies and developers moving inventory at scale.',
+    features: [
+      'Maximum 50 Verified Property Listings (Up to 6 Months)',
+      'Official Aether Brand Page & X Advertising Promotion',
+      'Featured Placement on Marketplace',
+      'Priority Rendering & Support',
+    ],
+    cta: 'Subscribe Now',
+    popular: true,
+    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_PRO_SUBSCRIPTION_URL,
+  },
+]
+
+type CheckoutStatus = 'redirecting' | 'unavailable' | 'error'
+
+const AD_DURATION_SECONDS = 15
+
+/**
+ * Simulated sponsored video ad for the Free Listing tier. Plays a placeholder
+ * "ad" with a countdown, then lets the visitor continue to publish. Replace the
+ * placeholder with a real ad network player when one is integrated.
+ */
+function SimulatedAdModal({ onClose, onComplete }: { onClose: () => void; onComplete: () => void }) {
+  const [secondsLeft, setSecondsLeft] = useState(AD_DURATION_SECONDS)
+  const finished = secondsLeft === 0
+
+  useEffect(() => {
+    if (finished) return
+    const timer = window.setTimeout(() => setSecondsLeft((s) => s - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [secondsLeft, finished])
+
+  const progress = ((AD_DURATION_SECONDS - secondsLeft) / AD_DURATION_SECONDS) * 100
+
+  return (
+    <Modal title="Watch Ad & Publish" onClose={onClose} className="sm:max-w-lg">
+      <div className="space-y-5 p-6">
+        <div className="relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-ink-700 via-accent-indigo/30 to-accent-emerald/20">
+          <span className="absolute left-3 top-3 rounded bg-ink-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+            Sponsored · Sample Ad
+          </span>
+          <span className="absolute right-3 top-3 rounded bg-ink-900/80 px-2 py-0.5 font-mono text-[11px] text-white">
+            {finished ? 'Done' : `0:${String(secondsLeft).padStart(2, '0')}`}
+          </span>
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <span className={cn('flex h-14 w-14 items-center justify-center rounded-full bg-white/10 backdrop-blur', !finished && 'animate-pulse')}>
+              {finished ? <CheckCircle2 className="h-7 w-7 text-accent-emerald-light" /> : <Radio className="h-7 w-7 text-white" />}
+            </span>
+            <p className="px-6 text-sm font-semibold text-white">
+              {finished ? 'Thanks for watching!' : 'Your sponsored video is playing...'}
+            </p>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-white/10">
+            <div className="h-full bg-gradient-to-r from-accent-indigo to-accent-emerald transition-[width] duration-1000 ease-linear" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <p role="status" aria-live="polite" className="text-center text-xs text-slate-400">
+          {finished
+            ? 'Your free listing is unlocked. Upload your photo in the studio to publish it.'
+            : `Watch the ad to unlock 1 free listing for 30 days. ${secondsLeft}s remaining.`}
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onComplete}
+            disabled={!finished}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent-emerald py-3 text-sm font-semibold text-ink-900 transition hover:bg-accent-emerald-light disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent-emerald"
+          >
+            Continue to Publish <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ProSubscriptionModal({
+  plan,
+  onClose,
+  onCheckout,
+}: {
+  plan: PricingPlan
+  onClose: () => void
+  onCheckout?: (plan: PricingPlan) => void | Promise<void>
+}) {
+  const [status, setStatus] = useState<CheckoutStatus>('redirecting')
+  const [attempt, setAttempt] = useState(0)
+  // Keep the latest handler in a ref so an inline prop doesn't restart the timer.
+  const onCheckoutRef = useRef(onCheckout)
+  onCheckoutRef.current = onCheckout
+
+  // Show the "Redirecting to Checkout..." state briefly, then hand off to
+  // Stripe: a custom checkout handler, then the configured Checkout URL.
+  useEffect(() => {
+    let cancelled = false
+    setStatus('redirecting')
+    const timer = window.setTimeout(async () => {
+      const checkout = onCheckoutRef.current
+      if (checkout) {
+        try {
+          await checkout(plan)
+        } catch {
+          if (!cancelled) setStatus('error')
+        }
+        return
+      }
+      if (plan.checkoutUrl) {
+        window.location.href = plan.checkoutUrl
+        return
+      }
+      if (!cancelled) setStatus('unavailable')
+    }, 1800)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [plan, attempt])
+
+  return (
+    <Modal title="Pro Agency Account Setup" onClose={onClose} className="sm:max-w-md">
+      <div className="space-y-6 p-6">
+        <div className="flex items-center gap-4 rounded-xl border border-accent-indigo/30 bg-gradient-to-br from-accent-indigo/15 to-transparent p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-indigo to-accent-emerald">
+            <Building2 className="h-5 w-5 text-white" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-white">{plan.name}</p>
+            <p className="text-sm text-slate-400">
+              <span className="font-display text-lg font-bold text-white">{plan.price}</span> {plan.period}
+            </p>
+          </div>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-indigo/20 px-2.5 py-1 text-[11px] font-semibold text-accent-indigo-light">
+            <Star className="h-3 w-3 fill-current" /> Popular
+          </span>
+        </div>
+
+        <ul className="space-y-2.5">
+          {plan.features.map((feature) => (
+            <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-300">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent-indigo-light" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        <div role="status" aria-live="polite" className="rounded-xl border border-white/5 bg-ink-900/60 p-4">
+          {status === 'redirecting' && (
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-accent-indigo-light" />
+              <div>
+                <p className="text-sm font-semibold text-white">Redirecting to Checkout...</p>
+                <p className="text-xs text-slate-400">Preparing your secure Pro agency checkout.</p>
+              </div>
+            </div>
+          )}
+          {status === 'unavailable' && (
+            <div className="flex items-start gap-3">
+              <Lock className="mt-0.5 h-5 w-5 shrink-0 text-accent-emerald-light" />
+              <div>
+                <p className="text-sm font-semibold text-white">Secure checkout is almost ready</p>
+                <p className="text-xs text-slate-400">
+                  Online payments for Pro agency accounts are launching soon. Your plan details are saved here.
+                </p>
+              </div>
+            </div>
+          )}
+          {status === 'error' && (
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+              <div>
+                <p className="text-sm font-semibold text-white">We couldn&apos;t start checkout</p>
+                <p className="text-xs text-slate-400">Please try again in a moment.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+          >
+            {status === 'redirecting' ? 'Cancel' : 'Close'}
+          </button>
+          {status === 'error' && (
+            <button
+              type="button"
+              onClick={() => setAttempt((n) => n + 1)}
+              className="flex-1 rounded-xl bg-accent-indigo py-3 text-sm font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900"
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function Pricing({
+  onNavigate,
+  onSelectPlan,
+}: {
+  onNavigate: (id: string) => void
+  /** Override to call a Stripe Checkout API endpoint, track analytics, etc. */
+  onSelectPlan?: (plan: PricingPlan) => void | Promise<void>
+}) {
+  const [proModalPlan, setProModalPlan] = useState<PricingPlan | null>(null)
+  const [adModalOpen, setAdModalOpen] = useState(false)
+
+  // Close the Pro modal if the visitor returns from Stripe via the back button.
+  useEffect(() => {
+    const reset = (e: PageTransitionEvent) => {
+      if (e.persisted) setProModalPlan(null)
+    }
+    window.addEventListener('pageshow', reset)
+    return () => window.removeEventListener('pageshow', reset)
+  }, [])
+
+  // Each plan has its own action:
+  // - Free Listing: play a simulated video ad, then go to the studio to publish.
+  // - Single Listing: smoothly scroll to the AI Staging & Architectural Studio
+  //   so the visitor can upload and stage an individual photo.
+  // - Pro Subscription: open the Pro agency setup modal, which hands off to
+  //   Stripe checkout once it is configured.
+  const handlePlanClick = (plan: PricingPlan) => {
+    if (plan.id === 'free-listing') {
+      setAdModalOpen(true)
+      return
+    }
+    if (plan.id === 'pro-subscription') {
+      setProModalPlan(plan)
+      return
+    }
+    onNavigate('staging-studio')
+  }
+
+  return (
+    <section id="pricing" className="bg-ink-900 py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-accent-emerald/30 bg-accent-emerald/10 px-3 py-1 text-xs font-semibold text-accent-emerald-light">
+            <CreditCard className="h-3.5 w-3.5" /> Pricing & Packages
+          </span>
+          <h2 className="mt-4 font-display text-3xl font-bold text-white sm:text-4xl">Simple, transparent pricing</h2>
+          <p className="mt-3 text-slate-400">Start free, pay per listing, or scale with Pro. No hidden fees.</p>
+        </div>
+
+        <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-3">
+          {PRICING_PLANS.map((plan) => (
+            <div
+              key={plan.name}
+              className={cn(
+                'relative flex flex-col rounded-2xl border p-6 transition lg:p-8',
+                plan.popular
+                  ? 'border-accent-indigo/50 bg-gradient-to-b from-accent-indigo/15 to-ink-800/80 shadow-2xl shadow-accent-indigo/20'
+                  : 'border-white/5 bg-ink-800/60 hover:border-white/10',
+              )}
+            >
+              {plan.popular && (
+                <span className="absolute -top-3 right-6 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-accent-indigo to-accent-emerald px-3 py-1 text-xs font-semibold text-white shadow-lg">
+                  <Star className="h-3 w-3 fill-current" /> Popular
+                </span>
+              )}
+
+              <h3 className="font-display text-xl font-bold text-white">{plan.name}</h3>
+              <p className="mt-2 text-sm text-slate-400">{plan.description}</p>
+
+              <div className="mt-6 flex items-baseline gap-2">
+                <span className="font-display text-5xl font-bold text-white">{plan.price}</span>
+                <span className="text-sm text-slate-400">{plan.period}</span>
+              </div>
+
+              <ul className="mt-8 flex-1 space-y-3">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm text-slate-300">
+                    <span
+                      className={cn(
+                        'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                        plan.popular
+                          ? 'bg-accent-indigo/20 text-accent-indigo-light'
+                          : plan.id === 'free-listing'
+                            ? 'bg-white/10 text-slate-300'
+                            : 'bg-accent-emerald/15 text-accent-emerald-light',
+                      )}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => handlePlanClick(plan)}
+                aria-haspopup={plan.id === 'single-listing' ? undefined : 'dialog'}
+                data-plan={plan.id}
+                className={cn(
+                  'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition',
+                  plan.popular
+                    ? 'bg-accent-indigo text-white hover:bg-accent-indigo-light hover:text-ink-900'
+                    : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
+                )}
+              >
+                {plan.cta} <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      {adModalOpen && (
+        <SimulatedAdModal
+          onClose={() => setAdModalOpen(false)}
+          onComplete={() => {
+            setAdModalOpen(false)
+            // Wait for the modal to unmount (it restores focus and page scroll) before scrolling.
+            window.setTimeout(() => onNavigate('staging-studio'), 50)
+          }}
+        />
+      )}
+      {proModalPlan && (
+        <ProSubscriptionModal plan={proModalPlan} onClose={() => setProModalPlan(null)} onCheckout={onSelectPlan} />
+      )}
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // App Entry
 // ---------------------------------------------------------------------------
 
@@ -810,6 +1472,7 @@ export default function App() {
         <Hero onNavigate={navigate} />
         <Marketplace />
         <StageForm />
+        <Pricing onNavigate={navigate} />
       </main>
       {verifyModalOpen && <SellerVerificationModal onClose={() => setVerifyModalOpen(false)} />}
     </div>
