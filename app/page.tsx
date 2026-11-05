@@ -634,7 +634,7 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
           >
             <ShieldCheck className="h-4 w-4" /> Verify Agency
           </button>
-          <button onClick={() => onNavigate('stage')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
+          <button onClick={() => onNavigate('staging-studio')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
             List a Property
           </button>
         </div>
@@ -657,7 +657,7 @@ function Hero({ onNavigate }: { onNavigate: (id: string) => void }) {
           Transform empty room photos or raw land plots into stunning architectural masterworks instantly.
         </p>
         <div className="mt-8 flex justify-center gap-4">
-          <button onClick={() => onNavigate('stage')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
+          <button onClick={() => onNavigate('staging-studio')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
             Stage a Property or Land
           </button>
           <button onClick={() => onNavigate('marketplace')} className="rounded-xl border border-white/10 px-6 py-3.5 font-semibold text-white">
@@ -765,7 +765,7 @@ function StageForm() {
   }
 
   return (
-    <section id="stage" className="border-y border-white/5 bg-ink-800/40 py-24">
+    <section id="staging-studio" className="scroll-mt-16 border-y border-white/5 bg-ink-800/40 py-24">
       <div className="mx-auto max-w-4xl px-6 rounded-2xl border border-white/5 bg-ink-800/80 p-8">
         <h2 className="font-display text-2xl font-bold text-white">AI Staging & Architectural Studio</h2>
         <p className="mt-1 text-xs text-slate-400">Upload a room or raw land plot photo to generate instant AI previews.</p>
@@ -1009,8 +1009,12 @@ function Pricing({
     return () => window.removeEventListener('pageshow', reset)
   }, [])
 
-  // Default behaviour: redirect to the plan's Stripe URL if one is configured,
-  // otherwise send the visitor to the staging studio.
+  // Smoothly scroll down to the AI Staging & Architectural Studio.
+  const scrollToStagingStudio = () => onNavigate('staging-studio')
+
+  // Click handler for both pricing buttons. Scrolls to the staging studio by
+  // default; redirects to Stripe only once a checkout URL or `onSelectPlan`
+  // handler has been configured.
   const handleCheckout = async (plan: PricingPlan) => {
     if (onSelectPlan) {
       setPendingPlan(plan.id)
@@ -1026,7 +1030,7 @@ function Pricing({
       window.location.href = plan.checkoutUrl
       return
     }
-    onNavigate('stage')
+    scrollToStagingStudio()
   }
 
   return (
