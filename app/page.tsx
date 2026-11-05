@@ -5,7 +5,7 @@ import { twMerge } from 'tailwind-merge'
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AuthProvider, useAuth } from '../lib/auth'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Phone, Car, Cpu, Factory, Tag, LogIn, LogOut, ChevronDown } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Phone, Car, Cpu, Factory, Tag, LogIn, LogOut, ChevronDown, Trash2, ListChecks } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // utils
@@ -1240,23 +1240,15 @@ function PropertyDetailModal({ listing, onClose }: { listing: Listing; onClose: 
 // Navbar & Hero
 // ---------------------------------------------------------------------------
 
-function AppleLogo({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
-      <path d="M16.37 12.6c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.95-3.94.95-.82 0-2.07-.93-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.15-.47 7.8 1.3 10.36.87 1.25 1.9 2.65 3.25 2.6 1.31-.05 1.8-.84 3.38-.84 1.57 0 2.02.84 3.4.82 1.4-.03 2.29-1.27 3.15-2.53.99-1.45 1.4-2.86 1.42-2.93-.03-.01-2.72-1.04-2.75-4.16zM13.79 4.96c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.29.69-3.03 1.56-.66.77-1.25 2-1.09 3.18 1.15.09 2.33-.58 3.05-1.45z" />
-    </svg>
-  )
-}
-
 function AuthModal({ initialMode = 'login', onClose }: { initialMode?: 'login' | 'register'; onClose: () => void }) {
-  const { signInWithPassword, signUpWithPassword, signInWithApple } = useAuth()
+  const { signInWithPassword, signUpWithPassword } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'apple' | 'confirm-email'>('idle')
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'confirm-email'>('idle')
   const [error, setError] = useState<string | null>(null)
   const formId = useId()
-  const busy = status === 'submitting' || status === 'apple'
+  const busy = status === 'submitting'
 
   const switchMode = (next: 'login' | 'register') => {
     setMode(next)
@@ -1289,18 +1281,6 @@ function AuthModal({ initialMode = 'login', onClose }: { initialMode?: 'login' |
       return
     }
     onClose()
-  }
-
-  const handleApple = async () => {
-    if (busy) return
-    setStatus('apple')
-    setError(null)
-    // On success the browser redirects to Apple, so only errors return here.
-    const message = await signInWithApple()
-    if (message) {
-      setError(message)
-      setStatus('idle')
-    }
   }
 
   const inputClass = 'w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2.5 text-sm text-white outline-none focus:border-accent-indigo/60'
@@ -1343,21 +1323,6 @@ function AuthModal({ initialMode = 'login', onClose }: { initialMode?: 'login' |
                 {m === 'login' ? 'Log in' : 'Register'}
               </button>
             ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleApple}
-            disabled={busy || !isSupabaseConfigured}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {status === 'apple' ? <Loader2 className="h-4 w-4 animate-spin" /> : <AppleLogo className="h-4 w-4" />}
-            {mode === 'login' ? 'Sign in with Apple' : 'Sign up with Apple'}
-          </button>
-
-          <div className="relative flex items-center justify-center">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
-            <span className="relative bg-ink-800 px-3 text-xs uppercase text-slate-500">Or with email</span>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1420,7 +1385,7 @@ function AuthModal({ initialMode = 'login', onClose }: { initialMode?: 'login' |
   )
 }
 
-function UserMenu() {
+function UserMenu({ onOpenMyListings }: { onOpenMyListings: () => void }) {
   const { user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -1470,6 +1435,17 @@ function UserMenu() {
             role="menuitem"
             onClick={() => {
               setOpen(false)
+              onOpenMyListings()
+            }}
+            className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-white/5"
+          >
+            <ListChecks className="h-4 w-4" /> My Listings
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
               void signOut()
             }}
             className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-white/5"
@@ -1482,14 +1458,145 @@ function UserMenu() {
   )
 }
 
+/** Storage path of a photo in the listing-images bucket, or null for external/placeholder images. */
+function listingImagePath(imageUrl: string | null) {
+  const marker = `/storage/v1/object/public/${LISTING_IMAGES_BUCKET}/`
+  const i = imageUrl?.indexOf(marker) ?? -1
+  return imageUrl && i >= 0 ? decodeURIComponent(imageUrl.slice(i + marker.length)) : null
+}
+
+function MyListingsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const { user } = useAuth()
+  const [rows, setRows] = useState<ListingRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const client = supabase
+    if (!client || !user) return
+    let cancelled = false
+    client
+      .from('listings')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error: loadError }) => {
+        if (cancelled) return
+        if (loadError) setError(loadError.message)
+        setRows((data as ListingRow[] | null) ?? [])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  const handleDelete = async (row: ListingRow) => {
+    if (!supabase || !user || deletingId) return
+    setDeletingId(row.id)
+    setError(null)
+    const { data, error: deleteError } = await supabase.from('listings').delete().eq('id', row.id).eq('user_id', user.id).select('id')
+    setDeletingId(null)
+    setConfirmingId(null)
+    if (deleteError || !data?.length) {
+      // RLS turns a disallowed delete into a no-op rather than an error.
+      setError(deleteError?.message ?? 'This listing could not be deleted. You can only delete listings you posted.')
+      return
+    }
+    const imagePath = listingImagePath(row.image_url)
+    if (imagePath?.startsWith(`${user.id}/`)) {
+      const { error: storageError } = await supabase.storage.from(LISTING_IMAGES_BUCKET).remove([imagePath])
+      if (storageError) console.warn('Listing photo cleanup skipped:', storageError.message)
+    }
+    setRows((current) => current?.filter((r) => r.id !== row.id) ?? null)
+    onChanged()
+  }
+
+  return (
+    <Modal title="My Listings" onClose={onClose} className="sm:max-w-2xl">
+      <div className="space-y-4 p-6">
+        {user && <p className="text-sm text-slate-400">Ads posted by <span className="text-slate-200">{user.email}</span></p>}
+        {error && (
+          <p role="alert" className="flex items-start gap-2 text-xs text-rose-300">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {error}
+          </p>
+        )}
+        {!user ? (
+          <p className="py-10 text-center text-sm text-slate-400">Log in to see your listings.</p>
+        ) : rows === null ? (
+          <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center">
+            <ListChecks className="mx-auto h-10 w-10 text-slate-500" />
+            <p className="mt-3 font-semibold text-white">No listings yet</p>
+            <p className="mt-1 text-sm text-slate-400">Ads you publish with Publish Direct will show up here.</p>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {rows.map((row) => {
+              const listing = rowToListing(row)
+              const confirming = confirmingId === row.id
+              const deleting = deletingId === row.id
+              return (
+                <li key={row.id} className="flex items-center gap-4 rounded-xl border border-white/10 bg-ink-900/40 p-3">
+                  <img src={listing.image} alt="" className="h-16 w-20 shrink-0 rounded-lg object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-white">{listing.title}</p>
+                    <p className="text-sm text-accent-emerald">{listing.price}</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {listing.location} · {listing.subcategory} · {listing.listedDaysAgo === 0 ? 'Today' : `${listing.listedDaysAgo}d ago`}
+                    </p>
+                  </div>
+                  {confirming ? (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(row)}
+                        disabled={deleting}
+                        className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-400 disabled:opacity-60"
+                      >
+                        {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingId(null)}
+                        disabled={deleting}
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingId(row.id)}
+                      disabled={deletingId !== null}
+                      aria-label={`Delete ${listing.title}`}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 function Navbar({
   onNavigate,
   onOpenVerify,
   onOpenAuth,
+  onOpenMyListings,
 }: {
   onNavigate: (id: string) => void
   onOpenVerify: () => void
   onOpenAuth: () => void
+  onOpenMyListings: () => void
 }) {
   const { user, loading } = useAuth()
   return (
@@ -1517,7 +1624,7 @@ function Navbar({
           {loading ? (
             <span className="h-9 w-9 animate-pulse rounded-lg bg-white/5" aria-hidden="true" />
           ) : user ? (
-            <UserMenu />
+            <UserMenu onOpenMyListings={onOpenMyListings} />
           ) : (
             <button
               type="button"
@@ -3440,6 +3547,7 @@ export default function App() {
 
 function AetherMarket() {
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [myListingsOpen, setMyListingsOpen] = useState(false)
   const [verifyModalOpen, setVerifyModalOpen] = useState(false)
   const [verifiedSellerOpen, setVerifiedSellerOpen] = useState(false)
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all')
@@ -3460,7 +3568,12 @@ function AetherMarket() {
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-200">
-      <Navbar onNavigate={navigate} onOpenVerify={() => setVerifiedSellerOpen(true)} onOpenAuth={() => setAuthModalOpen(true)} />
+      <Navbar
+        onNavigate={navigate}
+        onOpenVerify={() => setVerifiedSellerOpen(true)}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenMyListings={() => setMyListingsOpen(true)}
+      />
       <main>
         <Hero
           onNavigate={navigate}
@@ -3496,6 +3609,7 @@ function AetherMarket() {
       )}
       {verifyModalOpen && <SellerVerificationModal onClose={() => setVerifyModalOpen(false)} />}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+      {myListingsOpen && <MyListingsModal onClose={() => setMyListingsOpen(false)} onChanged={() => setListingsVersion((v) => v + 1)} />}
     </div>
   )
 }

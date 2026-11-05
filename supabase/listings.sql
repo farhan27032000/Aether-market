@@ -24,6 +24,10 @@ create policy "Public read listings" on public.listings
 create policy "Authenticated users insert own listings" on public.listings
   for insert to authenticated with check (auth.uid() = user_id);
 
+-- Owners can delete their own listings ("My Listings").
+create policy "Authenticated users delete own listings" on public.listings
+  for delete to authenticated using (auth.uid() = user_id);
+
 -- Optional: public bucket for original photos uploaded via Publish Direct.
 -- Without it, listings are still saved and shown with a placeholder image.
 insert into storage.buckets (id, name, public)
@@ -33,3 +37,7 @@ on conflict (id) do nothing;
 create policy "Authenticated upload own listing images" on storage.objects
   for insert to authenticated
   with check (bucket_id = 'listing-images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "Authenticated delete own listing images" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'listing-images' and (storage.foldername(name))[1] = auth.uid()::text);

@@ -14,7 +14,6 @@ interface AuthContextValue {
   /** Each action resolves to an error message, or null on success. */
   signInWithPassword: (email: string, password: string) => Promise<string | null>;
   signUpWithPassword: (email: string, password: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
-  signInWithApple: () => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 
@@ -57,14 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         // With email confirmation enabled, sign-up succeeds without returning a session.
         return { error: error?.message ?? null, needsConfirmation: !error && !data.session };
-      },
-      signInWithApple: async () => {
-        if (!supabase) return NOT_CONFIGURED;
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'apple',
-          options: { redirectTo: window.location.origin },
-        });
-        return error?.message ?? null;
       },
       signOut: async () => {
         await supabase?.auth.signOut();
