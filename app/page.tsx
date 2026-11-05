@@ -1230,6 +1230,9 @@ function Hero({
           onCountryChange={onCountryChange}
           onSubmit={() => onNavigate('marketplace')}
         />
+        <div className="mt-6 flex justify-center">
+          <PaymentsTrustBadge />
+        </div>
         <div className="mt-8 flex justify-center gap-4">
           <button onClick={() => onNavigate('staging-studio')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
             Sell & Enhance an Item
@@ -2151,12 +2154,8 @@ type PricingPlan = {
   features: string[]
   cta: string
   popular?: boolean
-  /**
-   * Optional Stripe Checkout / Payment Link URL. Set the matching
-   * NEXT_PUBLIC_* env var (Payment Links are public URLs) to go live,
-   * or replace `handleCheckout` below with a call to your own API endpoint.
-   */
-  checkoutUrl?: string
+  /** Paid tiers are checked out through Stripe via /api/checkout (card + USDC). */
+  paid?: boolean
 }
 
 const PRICING_PLANS: PricingPlan[] = [
@@ -2187,7 +2186,7 @@ const PRICING_PLANS: PricingPlan[] = [
       'HD Image Support (No Ads)',
     ],
     cta: 'Get Started',
-    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_SINGLE_LISTING_URL,
+    paid: true,
   },
   {
     id: 'verified-seller',
@@ -2202,7 +2201,7 @@ const PRICING_PLANS: PricingPlan[] = [
       'Priority in search & service filters',
     ],
     cta: 'Get Verified ($15/mo)',
-    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_VERIFIED_SELLER_URL,
+    paid: true,
   },
   {
     id: 'pro-subscription',
@@ -2218,18 +2217,67 @@ const PRICING_PLANS: PricingPlan[] = [
     ],
     cta: 'Subscribe Now',
     popular: true,
-    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_PRO_SUBSCRIPTION_URL,
+    paid: true,
   },
 ]
 
 type CheckoutStatus = 'redirecting' | 'unavailable' | 'error'
 
+class CheckoutUnavailableError extends Error {}
+
+/**
+ * Creates a Stripe Checkout Session (card + USDC crypto) for the given tier
+ * and redirects the browser to it. Throws CheckoutUnavailableError when
+ * Stripe isn't configured on the server yet.
+ */
+async function startCheckout(tier: PricingPlanId) {
+  const res = await fetch('/api/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier }),
+  })
+  if (res.status === 503) throw new CheckoutUnavailableError('Checkout is not configured')
+  const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
+  if (!res.ok || !data.url) throw new Error(data.error ?? 'Unable to start checkout')
+  window.location.href = data.url
+}
+
+const CRYPTO_TRUST_MESSAGE = '⚡ Global Crypto & Card Payments Supported | 100% Instant USDC Settlement Powered by Stripe'
+
+/** High-visibility callout used in the Hero and beneath the pricing grid. */
+function PaymentsTrustBadge({ className }: { className?: string }) {
+  return (
+    <p
+      className={cn(
+        'inline-flex max-w-full items-center justify-center rounded-full border border-amber-300/40 bg-gradient-to-r from-amber-400/15 via-accent-indigo/15 to-accent-emerald/15 px-4 py-2 text-center text-xs font-semibold text-amber-100 shadow-lg shadow-amber-500/10 sm:text-sm',
+        className,
+      )}
+    >
+      {CRYPTO_TRUST_MESSAGE}
+    </p>
+  )
+}
+
+/** Accepted payment methods shown under each paid pricing plan. */
+function PaymentMethodBadges({ className }: { className?: string }) {
+  return (
+    <ul aria-label="Accepted payment methods" className={cn('flex flex-col gap-2', className)}>
+      <li className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-200">
+        💳 Credit / Debit Card
+      </li>
+      <li className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300/30 bg-amber-400/10 px-2.5 py-1.5 text-xs font-medium text-amber-100">
+        ⚡ Pay with Crypto (USDC via Phantom, MetaMask, WalletConnect)
+      </li>
+    </ul>
+  )
+}
+
 const VERIFIED_SELLER_PLAN = PRICING_PLANS.find((p) => p.id === 'verified-seller') as PricingPlan
 
 /**
  * Verified Seller ($15/month) sign-up and checkout. Opened from the header
- * "Verify Seller" button and the pricing card. Hands off to the Stripe Payment
- * Link in NEXT_PUBLIC_STRIPE_VERIFIED_SELLER_URL when it is configured.
+ * "Verify Seller" button and the pricing card. Hands off to Stripe Checkout
+ * (card or USDC) through /api/checkout.
  */
 function VerifiedSellerModal({ onClose, onUploadDocuments }: { onClose: () => void; onUploadDocuments: () => void }) {
   const plan = VERIFIED_SELLER_PLAN
@@ -2237,19 +2285,14 @@ function VerifiedSellerModal({ onClose, onUploadDocuments }: { onClose: () => vo
 
   useEffect(() => {
     if (status !== 'redirecting') return
-    const timer = window.setTimeout(() => {
-      if (plan.checkoutUrl) {
-        try {
-          window.location.href = plan.checkoutUrl
-        } catch {
-          setStatus('error')
-        }
-        return
-      }
-      setStatus('unavailable')
-    }, 1500)
-    return () => window.clearTimeout(timer)
-  }, [status, plan.checkoutUrl])
+    let cancelled = false
+    startCheckout(plan.id).catch((err) => {
+      if (!cancelled) setStatus(err instanceof CheckoutUnavailableError ? 'unavailable' : 'error')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [status, plan.id])
 
   return (
     <Modal title="Become a Verified Seller" onClose={onClose} className="sm:max-w-md">
@@ -2332,6 +2375,7 @@ function VerifiedSellerModal({ onClose, onUploadDocuments }: { onClose: () => vo
           {status === 'unavailable' || status === 'error' ? 'Try Checkout Again' : `${plan.cta} `}
           <ArrowRight className="h-4 w-4" />
         </button>
+        <PaymentMethodBadges />
         <button
           type="button"
           onClick={onUploadDocuments}
@@ -2433,25 +2477,17 @@ function ProSubscriptionModal({
   onCheckoutRef.current = onCheckout
 
   // Show the "Redirecting to Checkout..." state briefly, then hand off to
-  // Stripe: a custom checkout handler, then the configured Checkout URL.
+  // Stripe: a custom checkout handler, or the /api/checkout session.
   useEffect(() => {
     let cancelled = false
     setStatus('redirecting')
     const timer = window.setTimeout(async () => {
-      const checkout = onCheckoutRef.current
-      if (checkout) {
-        try {
-          await checkout(plan)
-        } catch {
-          if (!cancelled) setStatus('error')
-        }
-        return
+      const checkout = onCheckoutRef.current ?? ((p: PricingPlan) => startCheckout(p.id))
+      try {
+        await checkout(plan)
+      } catch (err) {
+        if (!cancelled) setStatus(err instanceof CheckoutUnavailableError ? 'unavailable' : 'error')
       }
-      if (plan.checkoutUrl) {
-        window.location.href = plan.checkoutUrl
-        return
-      }
-      if (!cancelled) setStatus('unavailable')
     }, 1800)
     return () => {
       cancelled = true
@@ -2485,6 +2521,8 @@ function ProSubscriptionModal({
             </li>
           ))}
         </ul>
+
+        <PaymentMethodBadges />
 
         <div role="status" aria-live="polite" className="rounded-xl border border-white/5 bg-ink-900/60 p-4">
           {status === 'redirecting' && (
@@ -2648,11 +2686,16 @@ function Pricing({
 }) {
   const [proModalPlan, setProModalPlan] = useState<PricingPlan | null>(null)
   const [adModalOpen, setAdModalOpen] = useState(false)
+  const [pendingPlan, setPendingPlan] = useState<PricingPlanId | null>(null)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
   // Close the Pro modal if the visitor returns from Stripe via the back button.
   useEffect(() => {
     const reset = (e: PageTransitionEvent) => {
-      if (e.persisted) setProModalPlan(null)
+      if (e.persisted) {
+        setProModalPlan(null)
+        setPendingPlan(null)
+      }
     }
     window.addEventListener('pageshow', reset)
     return () => window.removeEventListener('pageshow', reset)
@@ -2660,12 +2703,12 @@ function Pricing({
 
   // Each plan has its own action:
   // - Free Listing: play a simulated video ad, then go to the studio to publish.
-  // - Single Listing: smoothly scroll to the AI Staging & Architectural Studio
-  //   so the visitor can upload and stage an individual photo.
+  // - Single Listing: start a $5 Stripe Checkout (card or USDC) right away.
   // - Verified Seller: open the $15/month Verified Seller checkout modal.
   // - Pro Subscription: open the Pro agency setup modal, which hands off to
-  //   Stripe checkout once it is configured.
-  const handlePlanClick = (plan: PricingPlan) => {
+  //   Stripe Checkout via /api/checkout.
+  const handlePlanClick = async (plan: PricingPlan) => {
+    setCheckoutError(null)
     if (plan.id === 'free-listing') {
       setAdModalOpen(true)
       return
@@ -2678,7 +2721,17 @@ function Pricing({
       setProModalPlan(plan)
       return
     }
-    onNavigate('staging-studio')
+    setPendingPlan(plan.id)
+    try {
+      await startCheckout(plan.id)
+    } catch (err) {
+      setPendingPlan(null)
+      setCheckoutError(
+        err instanceof CheckoutUnavailableError
+          ? 'Online checkout is launching soon. Please check back shortly.'
+          : "We couldn't start checkout. Please try again.",
+      )
+    }
   }
 
   return (
@@ -2729,6 +2782,8 @@ function Pricing({
                 <span className="text-sm text-slate-400">{plan.period}</span>
               </div>
 
+              {plan.paid && <PaymentMethodBadges className="mt-4" />}
+
               <ul className="mt-8 flex-1 space-y-3">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-3 text-sm text-slate-300">
@@ -2755,6 +2810,7 @@ function Pricing({
                 type="button"
                 onClick={() => handlePlanClick(plan)}
                 aria-haspopup={plan.id === 'single-listing' ? undefined : 'dialog'}
+                disabled={pendingPlan === plan.id}
                 data-plan={plan.id}
                 className={cn(
                   'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition',
@@ -2765,10 +2821,26 @@ function Pricing({
                       : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
                 )}
               >
-                {plan.cta} <ArrowRight className="h-4 w-4" />
+                {pendingPlan === plan.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Redirecting to Checkout...
+                  </>
+                ) : (
+                  <>
+                    {plan.cta} <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </div>
           ))}
+        </div>
+        {checkoutError && (
+          <p role="alert" className="mx-auto mt-6 max-w-xl text-center text-sm font-medium text-amber-300">
+            {checkoutError}
+          </p>
+        )}
+        <div className="mt-10 flex justify-center">
+          <PaymentsTrustBadge />
         </div>
       </div>
       {adModalOpen && (
@@ -2800,6 +2872,19 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchCountry, setSearchCountry] = useState<CountryFilter>('all')
   const navigate = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  const [checkoutResult, setCheckoutResult] = useState<'success' | 'canceled' | null>(null)
+
+  // Show a confirmation after returning from Stripe Checkout, then clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const result = params.get('success') === 'true' ? 'success' : params.get('canceled') === 'true' ? 'canceled' : null
+    if (!result) return
+    setCheckoutResult(result)
+    params.delete('success')
+    params.delete('canceled')
+    const qs = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`)
+  }, [])
 
   // Close the Verified Seller checkout if the visitor returns from Stripe via the back button.
   useEffect(() => {
@@ -2813,6 +2898,25 @@ export default function App() {
   return (
     <div className="min-h-screen bg-ink-900 text-slate-200">
       <Navbar onNavigate={navigate} onOpenVerify={() => setVerifiedSellerOpen(true)} />
+      {checkoutResult && (
+        <div
+          role="status"
+          className={cn(
+            'flex items-center justify-center gap-3 px-6 py-3 text-sm font-medium',
+            checkoutResult === 'success' ? 'bg-accent-emerald/15 text-accent-emerald-light' : 'bg-amber-400/10 text-amber-200',
+          )}
+        >
+          {checkoutResult === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+          <span>
+            {checkoutResult === 'success'
+              ? 'Payment received — thank you! Your plan is now being activated.'
+              : 'Checkout was canceled. You have not been charged.'}
+          </span>
+          <button type="button" onClick={() => setCheckoutResult(null)} aria-label="Dismiss" className="rounded p-1 hover:bg-white/10">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <main>
         <Hero
           onNavigate={navigate}
