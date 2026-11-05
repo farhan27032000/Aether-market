@@ -3,3 +3,4 @@ node_modules/
 .netlify/
 next-env.d.ts
 *.tsbuildinfo
+.env*.local
