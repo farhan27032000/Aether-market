@@ -10,6 +10,7 @@ create table if not exists public.listings (
   city text,
   category text,     -- 'real-estate' | 'vehicles' | 'electronics' | 'industrial' | 'services'
   image_url text,
+  user_id uuid references auth.users (id) on delete set null default auth.uid(),
   created_at timestamptz not null default now()
 );
 
@@ -19,9 +20,9 @@ alter table public.listings enable row level security;
 create policy "Public read listings" on public.listings
   for select using (true);
 
--- Publish Direct inserts with the publishable key. Tighten this (e.g. to authenticated users) once auth is added.
-create policy "Public insert listings" on public.listings
-  for insert with check (true);
+-- Only logged-in users can publish, and only as themselves.
+create policy "Authenticated users insert own listings" on public.listings
+  for insert to authenticated with check (auth.uid() = user_id);
 
 -- Optional: public bucket for original photos uploaded via Publish Direct.
 -- Without it, listings are still saved and shown with a placeholder image.
@@ -29,5 +30,6 @@ insert into storage.buckets (id, name, public)
 values ('listing-images', 'listing-images', true)
 on conflict (id) do nothing;
 
-create policy "Public upload listing images" on storage.objects
-  for insert with check (bucket_id = 'listing-images');
+create policy "Authenticated upload own listing images" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'listing-images' and (storage.foldername(name))[1] = auth.uid()::text);

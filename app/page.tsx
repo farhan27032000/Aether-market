@@ -3,8 +3,9 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { AuthProvider, useAuth } from '../lib/auth'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Phone, Car, Cpu, Factory, Tag } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Phone, Car, Cpu, Factory, Tag, LogIn, LogOut, ChevronDown } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // utils
@@ -462,6 +463,7 @@ interface ListingRow {
   city: string | null
   category: string | null
   image_url: string | null
+  user_id: string | null
   created_at: string | null
 }
 
@@ -575,10 +577,11 @@ function useSupabaseListings(query: string, country: CountryFilter, refreshKey: 
 }
 
 /** Uploads the original photo to Supabase Storage. Returns null if the bucket is missing or the upload fails. */
-async function uploadListingImage(file: File | null): Promise<string | null> {
+async function uploadListingImage(file: File | null, userId: string): Promise<string | null> {
   if (!supabase || !file) return null
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-  const path = `direct/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
+  // Stored under the uploader's user ID so storage policies can restrict writes to their own folder.
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
   const { error } = await supabase.storage.from(LISTING_IMAGES_BUCKET).upload(path, file, { contentType: file.type })
   if (error) {
     console.warn('Listing photo upload skipped:', error.message)
@@ -1237,7 +1240,258 @@ function PropertyDetailModal({ listing, onClose }: { listing: Listing; onClose: 
 // Navbar & Hero
 // ---------------------------------------------------------------------------
 
-function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void; onOpenVerify: () => void }) {
+function AppleLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M16.37 12.6c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.95-3.94.95-.82 0-2.07-.93-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.15-.47 7.8 1.3 10.36.87 1.25 1.9 2.65 3.25 2.6 1.31-.05 1.8-.84 3.38-.84 1.57 0 2.02.84 3.4.82 1.4-.03 2.29-1.27 3.15-2.53.99-1.45 1.4-2.86 1.42-2.93-.03-.01-2.72-1.04-2.75-4.16zM13.79 4.96c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.29.69-3.03 1.56-.66.77-1.25 2-1.09 3.18 1.15.09 2.33-.58 3.05-1.45z" />
+    </svg>
+  )
+}
+
+function AuthModal({ initialMode = 'login', onClose }: { initialMode?: 'login' | 'register'; onClose: () => void }) {
+  const { signInWithPassword, signUpWithPassword, signInWithApple } = useAuth()
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'apple' | 'confirm-email'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const formId = useId()
+  const busy = status === 'submitting' || status === 'apple'
+
+  const switchMode = (next: 'login' | 'register') => {
+    setMode(next)
+    setError(null)
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (busy) return
+    setStatus('submitting')
+    setError(null)
+    if (mode === 'login') {
+      const message = await signInWithPassword(email.trim(), password)
+      if (message) {
+        setError(message)
+        setStatus('idle')
+        return
+      }
+      onClose()
+      return
+    }
+    const result = await signUpWithPassword(email.trim(), password)
+    if (result.error) {
+      setError(result.error)
+      setStatus('idle')
+      return
+    }
+    if (result.needsConfirmation) {
+      setStatus('confirm-email')
+      return
+    }
+    onClose()
+  }
+
+  const handleApple = async () => {
+    if (busy) return
+    setStatus('apple')
+    setError(null)
+    // On success the browser redirects to Apple, so only errors return here.
+    const message = await signInWithApple()
+    if (message) {
+      setError(message)
+      setStatus('idle')
+    }
+  }
+
+  const inputClass = 'w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2.5 text-sm text-white outline-none focus:border-accent-indigo/60'
+
+  return (
+    <Modal title={mode === 'login' ? 'Log in to Aether Market' : 'Create your Aether Market account'} onClose={onClose} className="sm:max-w-md">
+      {status === 'confirm-email' ? (
+        <div className="p-6 text-center">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-accent-emerald" />
+          <p className="mt-4 font-display text-xl font-semibold text-white">Check your email</p>
+          <p className="mt-2 text-sm text-slate-400">
+            We sent a confirmation link to <span className="text-slate-200">{email}</span>. Open it to activate your account, then log in.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setStatus('idle')
+              switchMode('login')
+            }}
+            className="mt-6 w-full rounded-xl bg-ink-700 py-3 font-semibold text-white transition hover:bg-white/10"
+          >
+            Back to Log in
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-5 p-6">
+          <div role="tablist" aria-label="Authentication mode" className="grid grid-cols-2 gap-1 rounded-xl bg-ink-900/60 p-1">
+            {(['login', 'register'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => switchMode(m)}
+                className={cn(
+                  'rounded-lg py-2 text-sm font-semibold transition',
+                  mode === m ? 'bg-ink-700 text-white shadow' : 'text-slate-400 hover:text-white',
+                )}
+              >
+                {m === 'login' ? 'Log in' : 'Register'}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleApple}
+            disabled={busy || !isSupabaseConfigured}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-semibold text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {status === 'apple' ? <Loader2 className="h-4 w-4 animate-spin" /> : <AppleLogo className="h-4 w-4" />}
+            {mode === 'login' ? 'Sign in with Apple' : 'Sign up with Apple'}
+          </button>
+
+          <div className="relative flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+            <span className="relative bg-ink-800 px-3 text-xs uppercase text-slate-500">Or with email</span>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor={`${formId}-email`} className="mb-1 block text-xs font-medium text-slate-300">Email</label>
+              <input
+                id={`${formId}-email`}
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${formId}-password`} className="mb-1 block text-xs font-medium text-slate-300">Password</label>
+              <input
+                id={`${formId}-password`}
+                type="password"
+                required
+                minLength={6}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputClass}
+              />
+              {mode === 'register' && <p className="mt-1 text-[11px] text-slate-500">At least 6 characters.</p>}
+            </div>
+
+            {error && (
+              <p role="alert" className="flex items-start gap-2 text-xs text-rose-300">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={busy || !isSupabaseConfigured}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-indigo py-3 font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {status === 'submitting' ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === 'login' ? 'Log in' : 'Create account'}
+            </button>
+          </form>
+
+          <p className="text-center text-xs text-slate-400">
+            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              type="button"
+              onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+              className="font-semibold text-accent-indigo-light hover:underline"
+            >
+              {mode === 'login' ? 'Register' : 'Log in'}
+            </button>
+          </p>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function UserMenu() {
+  const { user, signOut } = useAuth()
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: globalThis.PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  if (!user) return null
+  const label = user.email ?? 'Account'
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-lg border border-white/10 px-2 py-1.5 text-sm text-white transition hover:border-white/20 hover:bg-white/5"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-accent-indigo to-accent-emerald text-xs font-bold">
+          {label[0]?.toUpperCase()}
+        </span>
+        <span className="hidden max-w-[10rem] truncate md:inline">{label}</span>
+        <ChevronDown className="h-4 w-4 text-slate-400" />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 mt-2 w-60 overflow-hidden rounded-xl border border-white/10 bg-ink-800 shadow-2xl">
+          <div className="border-b border-white/5 px-4 py-3">
+            <p className="text-[11px] uppercase tracking-wider text-slate-500">Signed in as</p>
+            <p className="truncate text-sm font-medium text-white">{label}</p>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              void signOut()
+            }}
+            className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-white/5"
+          >
+            <LogOut className="h-4 w-4" /> Log out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Navbar({
+  onNavigate,
+  onOpenVerify,
+  onOpenAuth,
+}: {
+  onNavigate: (id: string) => void
+  onOpenVerify: () => void
+  onOpenAuth: () => void
+}) {
+  const { user, loading } = useAuth()
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-ink-900/80 backdrop-blur-xl">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
@@ -1260,6 +1514,20 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
           <button onClick={() => onNavigate('staging-studio')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
             Post an Ad
           </button>
+          {loading ? (
+            <span className="h-9 w-9 animate-pulse rounded-lg bg-white/5" aria-hidden="true" />
+          ) : user ? (
+            <UserMenu />
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              aria-haspopup="dialog"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+            >
+              <LogIn className="h-4 w-4" /> Log in
+            </button>
+          )}
         </div>
       </nav>
     </header>
@@ -1936,7 +2204,10 @@ const PRESET_MARKET_CATEGORY: Record<EnhancerPresetId, MarketCategory> = {
   'showroom-display': 'industrial',
 }
 
-function StageForm({ onPublished }: { onPublished?: (listing: Listing) => void }) {
+function StageForm({ onPublished, onRequestAuth }: { onPublished?: (listing: Listing) => void; onRequestAuth: () => void }) {
+  const { user } = useAuth()
+  // Set when a logged-out visitor clicks Publish Direct, so the form opens once they log in.
+  const [publishAfterLogin, setPublishAfterLogin] = useState(false)
   const [presetId, setPresetId] = useState<EnhancerPresetId>('interior-staging')
   const [style, setStyle] = useState<string>(ENHANCER_PRESETS[0].variants[0])
   const [emailModalOpen, setEmailModalOpen] = useState(false)
@@ -2009,8 +2280,20 @@ function StageForm({ onPublished }: { onPublished?: (listing: Listing) => void }
   const publishDirect = () => {
     if (!previewUrl) return
     setMode('direct')
-    if (!publishedListing) setPublishModalOpen(true)
+    if (publishedListing) return
+    if (!user) {
+      setPublishAfterLogin(true)
+      onRequestAuth()
+      return
+    }
+    setPublishModalOpen(true)
   }
+
+  useEffect(() => {
+    if (!user || !publishAfterLogin) return
+    setPublishAfterLogin(false)
+    if (previewUrl && !publishedListing) setPublishModalOpen(true)
+  }, [user, publishAfterLogin, previewUrl, publishedListing])
 
   // Re-render the AI preview if the category or style changes after staging.
   const restageIfNeeded = () => {
@@ -2094,10 +2377,10 @@ function StageForm({ onPublished }: { onPublished?: (listing: Listing) => void }
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setPublishModalOpen(true)}
+                          onClick={publishDirect}
                           className="flex items-center gap-1 text-xs font-semibold text-accent-emerald-light hover:underline"
                         >
-                          <Send className="h-3.5 w-3.5" /> Add details &amp; publish
+                          <Send className="h-3.5 w-3.5" /> {user ? 'Add details & publish' : 'Log in to publish'}
                         </button>
                       )}
                     </div>
@@ -2289,6 +2572,11 @@ function StageForm({ onPublished }: { onPublished?: (listing: Listing) => void }
             previewUrl={previewUrl}
             defaultCategory={PRESET_MARKET_CATEGORY[presetId]}
             onClose={() => setPublishModalOpen(false)}
+            onRequestAuth={() => {
+              setPublishModalOpen(false)
+              setPublishAfterLogin(true)
+              onRequestAuth()
+            }}
             onPublished={(listing) => {
               setPublishedListing(listing)
               onPublished?.(listing)
@@ -2329,14 +2617,17 @@ function PublishDirectModal({
   previewUrl,
   defaultCategory,
   onClose,
+  onRequestAuth,
   onPublished,
 }: {
   file: File | null
   previewUrl: string | null
   defaultCategory: MarketCategory
   onClose: () => void
+  onRequestAuth: () => void
   onPublished: (listing: Listing) => void
 }) {
+  const { user } = useAuth()
   const [title, setTitle] = useState('')
   const [price, setPrice] = useState('')
   const [country, setCountry] = useState<CountryCode>('US')
@@ -2349,11 +2640,11 @@ function PublishDirectModal({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!supabase || status === 'publishing') return
+    if (!supabase || !user || status === 'publishing') return
     setStatus('publishing')
     setError(null)
 
-    const imageUrl = await uploadListingImage(file)
+    const imageUrl = await uploadListingImage(file, user.id)
     const row: NewListingRow = {
       title: title.trim(),
       description: description.trim() || null,
@@ -2362,6 +2653,7 @@ function PublishDirectModal({
       city: city.trim() || null,
       category,
       image_url: imageUrl,
+      user_id: user.id,
     }
 
     const { data, error: insertError } = await supabase.from('listings').insert(row).select().single()
@@ -2390,6 +2682,19 @@ function PublishDirectModal({
             className="mt-6 w-full rounded-xl bg-ink-700 py-3 font-semibold text-white transition hover:bg-white/10"
           >
             Close
+          </button>
+        </div>
+      ) : !user ? (
+        <div className="p-6 text-center">
+          <Lock className="mx-auto h-10 w-10 text-accent-indigo-light" />
+          <p className="mt-4 font-display text-xl font-semibold text-white">Log in to post ads</p>
+          <p className="mt-2 text-sm text-slate-400">Only registered users can publish listings on Aether Market.</p>
+          <button
+            type="button"
+            onClick={onRequestAuth}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-indigo py-3 font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900"
+          >
+            <LogIn className="h-4 w-4" /> Log in or Register
           </button>
         </div>
       ) : (
@@ -3126,6 +3431,15 @@ function Pricing({
 // ---------------------------------------------------------------------------
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AetherMarket />
+    </AuthProvider>
+  )
+}
+
+function AetherMarket() {
+  const [authModalOpen, setAuthModalOpen] = useState(false)
   const [verifyModalOpen, setVerifyModalOpen] = useState(false)
   const [verifiedSellerOpen, setVerifiedSellerOpen] = useState(false)
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all')
@@ -3146,7 +3460,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-200">
-      <Navbar onNavigate={navigate} onOpenVerify={() => setVerifiedSellerOpen(true)} />
+      <Navbar onNavigate={navigate} onOpenVerify={() => setVerifiedSellerOpen(true)} onOpenAuth={() => setAuthModalOpen(true)} />
       <main>
         <Hero
           onNavigate={navigate}
@@ -3168,7 +3482,7 @@ export default function App() {
           onCountryChange={setSearchCountry}
           refreshKey={listingsVersion}
         />
-        <StageForm onPublished={() => setListingsVersion((v) => v + 1)} />
+        <StageForm onPublished={() => setListingsVersion((v) => v + 1)} onRequestAuth={() => setAuthModalOpen(true)} />
         <Pricing onNavigate={navigate} onGetVerified={() => setVerifiedSellerOpen(true)} />
       </main>
       {verifiedSellerOpen && (
@@ -3181,6 +3495,7 @@ export default function App() {
         />
       )}
       {verifyModalOpen && <SellerVerificationModal onClose={() => setVerifyModalOpen(false)} />}
+      {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
     </div>
   )
 }
