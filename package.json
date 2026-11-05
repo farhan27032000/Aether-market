@@ -1,3 +1,4 @@
+
 {
   "name": "aether-market",
   "version": "0.1.0",
@@ -18,5 +19,10 @@
     "react-dom": "^18",
     "tailwind-merge": "^2.3.0",
     "tailwindcss": "^3.4.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^18.3.0",
+    "@types/node": "^20.0.0"
   }
 }
