@@ -100,14 +100,14 @@ const CATEGORIES: { value: SpaceCategory; label: string; isLand?: boolean }[] = 
 ]
 
 const SAMPLE_RENDERS: Record<SpaceCategory, string> = {
-  'Living Room': '/listings/loft-after.png',
-  Kitchen: '/listings/kitchen-after.png',
-  Bedroom: '/listings/bedroom-after.png',
-  Office: '/listings/study-after.png',
-  'Dining Room': '/listings/dining-after.png',
-  Commercial: '/listings/lounge-after.png',
-  'Raw Land / Plot': '/listings/land-after.png',
-  'Exterior & Lawn': '/listings/exterior-after.png',
+  'Living Room': 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=80',
+  Kitchen: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=80',
+  Bedroom: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80',
+  Office: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80',
+  'Dining Room': 'https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=1600&q=80',
+  Commercial: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80',
+  'Raw Land / Plot': 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80',
+  'Exterior & Lawn': 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1600&q=80',
 }
 
 const LISTINGS: Listing[] = [
@@ -120,8 +120,8 @@ const LISTINGS: Listing[] = [
     price: '$450,000',
     rating: 5.0,
     sqft: 18500,
-    beforeImage: '/listings/land-before.png',
-    afterImage: '/listings/land-after.png',
+    beforeImage: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1600&q=80',
+    afterImage: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80',
     description:
       '0.42 acres of pristine sloping land with panoramic hill country views. Zoned R-1 with utility hookups available at curb. Rendered vision shows potential 4,200 sqft modern cantilevered villa.',
     features: ['0.42 Acres', 'Hill country views', 'Utilities at street', 'Architectural plans optional'],
@@ -139,8 +139,8 @@ const LISTINGS: Listing[] = [
     beds: 2,
     baths: 2,
     sqft: 1240,
-    beforeImage: '/listings/loft-before.png',
-    afterImage: '/listings/loft-after.png',
+    beforeImage: 'https://images.unsplash.com/photo-1560185007-cde436f6a4d0?auto=format&fit=crop&w=1600&q=80',
+    afterImage: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=80',
     description:
       'A sun-filled downtown loft with 14-foot ceilings, polished concrete floors, and unobstructed skyline views. Walking distance to Lady Bird Lake and the Rainey Street district.',
     features: ['14 ft ceilings', 'Skyline views', 'Rooftop pool access', 'Secured parking'],
@@ -158,8 +158,8 @@ const LISTINGS: Listing[] = [
     beds: 3,
     baths: 2.5,
     sqft: 2100,
-    beforeImage: '/listings/kitchen-before.png',
-    afterImage: '/listings/kitchen-after.png',
+    beforeImage: 'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1600&q=80',
+    afterImage: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=80',
     description:
       'Renovated chef’s kitchen with a quartz island overlooking Elliott Bay. Bright, open-plan living with radiant floor heating throughout the main level.',
     features: ['Quartz island', 'Bay views', 'Radiant heating', 'EV charger'],
@@ -177,8 +177,8 @@ const LISTINGS: Listing[] = [
     beds: 2,
     baths: 2,
     sqft: 1480,
-    beforeImage: '/listings/bedroom-before.png',
-    afterImage: '/listings/bedroom-after.png',
+    beforeImage: 'https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1600&q=80',
+    afterImage: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80',
     description:
       'A calm, light-washed retreat with hand-troweled plaster walls and framed views of the McDowell Mountains. Private courtyard and low-maintenance desert landscaping.',
     features: ['Mountain views', 'Private courtyard', 'Smart home', 'Solar panels'],
