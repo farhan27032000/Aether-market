@@ -3,7 +3,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, Loader2, Lock, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // utils
@@ -69,6 +69,10 @@ interface Listing {
   features: string[]
   seller: Seller
   listedDaysAgo: number
+  /** Listing has passed ownership & document checks. Shows the "Verified Listing" badge. */
+  isVerifiedListing?: boolean
+  /** Approximate location, used to place the pin in Map View. */
+  coordinates: { lat: number; lng: number }
 }
 
 const INTERIOR_STYLES: InteriorStyle[] = [
@@ -127,6 +131,8 @@ const LISTINGS: Listing[] = [
     features: ['0.42 Acres', 'Hill country views', 'Utilities at street', 'Architectural plans optional'],
     seller: { name: 'Maya Chen', agency: 'Lone Star Urban Realty', initials: 'MC', responseTime: '~10 min', isVerifiedAgent: true },
     listedDaysAgo: 2,
+    isVerifiedListing: true,
+    coordinates: { lat: 30.34, lng: -97.86 },
   },
   {
     id: 'skyline-loft',
@@ -146,6 +152,8 @@ const LISTINGS: Listing[] = [
     features: ['14 ft ceilings', 'Skyline views', 'Rooftop pool access', 'Secured parking'],
     seller: { name: 'Maya Chen', agency: 'Lone Star Urban Realty', initials: 'MC', responseTime: '~10 min', isVerifiedAgent: true },
     listedDaysAgo: 3,
+    isVerifiedListing: true,
+    coordinates: { lat: 30.26, lng: -97.74 },
   },
   {
     id: 'harbor-kitchen',
@@ -165,6 +173,8 @@ const LISTINGS: Listing[] = [
     features: ['Quartz island', 'Bay views', 'Radiant heating', 'EV charger'],
     seller: { name: 'Jonas Berg', agency: 'Pacific Crest Homes', initials: 'JB', responseTime: '~1 hr', isVerifiedAgent: false },
     listedDaysAgo: 7,
+    isVerifiedListing: true,
+    coordinates: { lat: 47.61, lng: -122.35 },
   },
   {
     id: 'desert-suite',
@@ -184,6 +194,8 @@ const LISTINGS: Listing[] = [
     features: ['Mountain views', 'Private courtyard', 'Smart home', 'Solar panels'],
     seller: { name: 'Elena Ruiz', agency: 'Sonoran Living Group', initials: 'ER', responseTime: '~30 min', isVerifiedAgent: true },
     listedDaysAgo: 12,
+    isVerifiedListing: true,
+    coordinates: { lat: 33.49, lng: -111.93 },
   },
 ]
 
@@ -211,7 +223,7 @@ function Modal({ title, onClose, children, className, hideTitle }: ModalProps) {
     document.body.style.overflow = 'hidden'
     panelRef.current?.focus()
 
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
@@ -567,11 +579,145 @@ function ChatModal({ listing, onClose }: { listing: Listing; onClose: () => void
   )
 }
 
-function PropertyDetailModal({ listing, onClose, initialChatOpen = false }: { listing: Listing; onClose: () => void; initialChatOpen?: boolean }) {
-  const [chatOpen, setChatOpen] = useState(initialChatOpen)
+/**
+ * WhatsApp number that receives buyer inquiries, in international format
+ * without "+" or spaces (e.g. 15125550123). When unset, WhatsApp opens with the
+ * message prefilled and the visitor picks who to send it to.
+ */
+const WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '').replace(/\D/g, '')
 
-  if (chatOpen) {
-    return <ChatModal listing={listing} onClose={() => setChatOpen(false)} />
+function buildWhatsAppUrl(text: string) {
+  const base = WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}` : 'https://wa.me/'
+  return `${base}?text=${encodeURIComponent(text)}`
+}
+
+function VerifiedListingBadge({ className }: { className?: string }) {
+  return (
+    <span
+      title="Ownership and listing documents verified by Aether Market"
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-emerald/30 bg-accent-emerald/10 py-0.5 pl-1 pr-2 text-[11px] font-semibold text-accent-emerald-light',
+        className,
+      )}
+    >
+      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent-emerald text-ink-900">
+        <Check className="h-3 w-3" strokeWidth={3} />
+      </span>
+      Verified Listing
+    </span>
+  )
+}
+
+function InquiryModal({ listing, onClose }: { listing: Listing; onClose: () => void }) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const nameId = useId()
+  const emailId = useId()
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const message = [
+      `Hi ${listing.seller.name.split(' ')[0]}, I'm interested in "${listing.title}" (${listing.price}, ${listing.location}) on Aether Market.`,
+      `Name: ${name.trim()}`,
+      `Email: ${email.trim()}`,
+      'Could you share more details or arrange a viewing?',
+    ].join('\n')
+    window.open(buildWhatsAppUrl(message), '_blank', 'noopener,noreferrer')
+    setSent(true)
+  }
+
+  return (
+    <Modal title="Inquire About This Property" onClose={onClose} className="sm:max-w-md">
+      <div className="space-y-5 p-6">
+        <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-700/60 p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={listing.afterImage} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-white">{listing.title}</p>
+            <p className="truncate text-xs text-slate-400">
+              {listing.seller.name} · {listing.seller.agency}
+            </p>
+            <p className="text-sm font-bold text-accent-emerald-light">{listing.price}</p>
+          </div>
+        </div>
+
+        {sent ? (
+          <div role="status" className="text-center">
+            <CheckCircle2 className="mx-auto h-10 w-10 text-accent-emerald" />
+            <p className="mt-3 font-semibold text-white">Inquiry ready in WhatsApp</p>
+            <p className="mt-1 text-sm text-slate-400">
+              Hit send in WhatsApp to reach {listing.seller.name.split(' ')[0]}. Typical reply time {listing.seller.responseTime}.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setSent(false)}
+                className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-white transition hover:bg-white/5"
+              >
+                Edit Details
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-xl bg-ink-700 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor={nameId} className="mb-1 block text-xs font-medium text-slate-300">Name</label>
+              <input
+                id={nameId}
+                type="text"
+                required
+                autoComplete="name"
+                placeholder="Your full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2.5 text-sm text-white outline-none focus:border-accent-indigo"
+              />
+            </div>
+            <div>
+              <label htmlFor={emailId} className="mb-1 block text-xs font-medium text-slate-300">Email</label>
+              <input
+                id={emailId}
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2.5 text-sm text-white outline-none focus:border-accent-indigo"
+              />
+            </div>
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3.5 font-semibold text-ink-900 transition hover:brightness-110"
+            >
+              <MessageCircle className="h-5 w-5" /> Send via WhatsApp
+            </button>
+            <p className="text-center text-[11px] text-slate-500">
+              Opens WhatsApp with your inquiry prefilled. Avg. agent response {listing.seller.responseTime}.
+            </p>
+          </form>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function PropertyDetailModal({ listing, onClose }: { listing: Listing; onClose: () => void }) {
+  const [view, setView] = useState<'details' | 'inquiry' | 'chat'>('details')
+
+  if (view === 'inquiry') {
+    return <InquiryModal listing={listing} onClose={() => setView('details')} />
+  }
+  if (view === 'chat') {
+    return <ChatModal listing={listing} onClose={() => setView('details')} />
   }
 
   return (
@@ -579,9 +725,10 @@ function PropertyDetailModal({ listing, onClose, initialChatOpen = false }: { li
       <div className="grid gap-6 p-6 lg:grid-cols-2">
         <BeforeAfterSlider beforeImage={listing.beforeImage} afterImage={listing.afterImage} alt={listing.title} />
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-accent-indigo/10 px-3 py-0.5 text-xs text-accent-indigo-light">{listing.category}</span>
             <span className="rounded-full bg-white/5 px-3 py-0.5 text-xs text-slate-300">{listing.style}</span>
+            {listing.isVerifiedListing && <VerifiedListingBadge />}
           </div>
           <p className="mt-4 font-display text-3xl font-bold text-accent-emerald-light">{listing.price}</p>
           <p className="mt-1 text-sm text-slate-400"><MapPin className="inline h-4 w-4" /> {listing.location}</p>
@@ -594,19 +741,29 @@ function PropertyDetailModal({ listing, onClose, initialChatOpen = false }: { li
             <div className="flex-1">
               <div className="flex items-center gap-1.5">
                 <p className="text-sm font-semibold text-white">{listing.seller.name}</p>
-                {listing.seller.isVerifiedAgent && <BadgeCheck className="h-4 w-4 text-accent-emerald" title="Verified Broker" />}
+                {listing.seller.isVerifiedAgent && <BadgeCheck className="h-4 w-4 text-accent-emerald" aria-label="Verified Broker" />}
               </div>
               <p className="text-xs text-slate-400">{listing.seller.agency}</p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setChatOpen(true)}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-indigo py-3.5 font-semibold text-white transition hover:bg-accent-indigo-light"
-          >
-            <MessageCircle className="h-5 w-5" /> Contact Seller
-          </button>
+          <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <button
+              type="button"
+              onClick={() => setView('inquiry')}
+              aria-haspopup="dialog"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-indigo py-3.5 font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900"
+            >
+              <Send className="h-5 w-5" /> Contact Agent
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('chat')}
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3.5 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+            >
+              <MessageCircle className="h-4 w-4" /> Chat
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
@@ -673,35 +830,216 @@ function Hero({ onNavigate }: { onNavigate: (id: string) => void }) {
 // Marketplace & StageForm
 // ---------------------------------------------------------------------------
 
+type MarketplaceView = 'grid' | 'map'
+
+// Continental US bounds used to project listing coordinates onto the map preview.
+const MAP_BOUNDS = { minLat: 24, maxLat: 50, minLng: -125, maxLng: -66 }
+
+function projectToMap({ lat, lng }: { lat: number; lng: number }) {
+  const x = ((lng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng)) * 100
+  const y = ((MAP_BOUNDS.maxLat - lat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * 100
+  return { x: Math.max(4, Math.min(96, x)), y: Math.max(6, Math.min(94, y)) }
+}
+
+function ViewToggle({ view, onChange }: { view: MarketplaceView; onChange: (v: MarketplaceView) => void }) {
+  const options: { value: MarketplaceView; label: string; icon: ReactNode }[] = [
+    { value: 'grid', label: 'Grid View', icon: <LayoutGrid className="h-4 w-4" /> },
+    { value: 'map', label: 'Map View', icon: <MapIcon className="h-4 w-4" /> },
+  ]
+  return (
+    <div role="group" aria-label="Listing view" className="relative inline-flex rounded-xl border border-white/10 bg-ink-800 p-1">
+      <span
+        aria-hidden="true"
+        className={cn(
+          'absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-accent-indigo shadow-lg shadow-accent-indigo/30 transition-transform duration-300',
+          view === 'map' && 'translate-x-full',
+        )}
+      />
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={view === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            'relative z-10 flex w-32 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors',
+            view === o.value ? 'text-white' : 'text-slate-400 hover:text-white',
+          )}
+        >
+          {o.icon} {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ListingCard({ listing, onView, onInquire }: { listing: Listing; onView: () => void; onInquire: () => void }) {
+  return (
+    <div className="rounded-2xl border border-white/5 bg-ink-800/60 p-4 transition hover:border-white/10">
+      <BeforeAfterSlider beforeImage={listing.beforeImage} afterImage={listing.afterImage} alt={listing.title} />
+      <div className="mt-4">
+        {listing.isVerifiedListing && <VerifiedListingBadge className="mb-2" />}
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-white">{listing.title}</h3>
+          {listing.seller.isVerifiedAgent && <BadgeCheck className="h-4 w-4 shrink-0 text-accent-emerald" aria-label="Verified Broker" />}
+        </div>
+        <p className="text-xs text-slate-400">{listing.location}</p>
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/5 pt-3">
+          <span className="font-display text-xl font-bold text-accent-emerald-light">{listing.price}</span>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onView} className="text-xs font-semibold text-slate-300 transition hover:text-white">
+              Details
+            </button>
+            <button
+              type="button"
+              onClick={onInquire}
+              aria-haspopup="dialog"
+              className="flex items-center gap-1 rounded-lg bg-accent-indigo/15 px-3 py-1.5 text-xs font-semibold text-accent-indigo-light transition hover:bg-accent-indigo hover:text-white"
+            >
+              <Send className="h-3.5 w-3.5" /> Inquire
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MapPreview({ onView, onInquire }: { onView: (l: Listing) => void; onInquire: (l: Listing) => void }) {
+  const [activeId, setActiveId] = useState<string>(LISTINGS[0].id)
+  const active = LISTINGS.find((l) => l.id === activeId) ?? LISTINGS[0]
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-[#0b1020] sm:aspect-[16/10]">
+        {/* Stylised dark basemap */}
+        <svg aria-hidden="true" className="absolute inset-0 h-full w-full" viewBox="0 0 100 62.5" preserveAspectRatio="none">
+          <defs>
+            <pattern id="map-grid" width="5" height="5" patternUnits="userSpaceOnUse">
+              <path d="M5 0H0V5" fill="none" stroke="rgba(148,163,184,0.07)" strokeWidth="0.15" />
+            </pattern>
+            <radialGradient id="map-glow" cx="50%" cy="45%" r="60%">
+              <stop offset="0%" stopColor="rgba(99,102,241,0.18)" />
+              <stop offset="100%" stopColor="rgba(99,102,241,0)" />
+            </radialGradient>
+          </defs>
+          <rect width="100" height="62.5" fill="url(#map-grid)" />
+          <path
+            d="M6 12 L14 8 L30 9 L48 10 L62 12 L74 10 L86 8 L93 14 L90 22 L88 30 L84 36 L80 44 L74 50 L68 52 L62 50 L56 55 L50 58 L44 54 L36 50 L28 47 L20 42 L12 36 L8 28 L5 20 Z"
+            fill="rgba(30,41,59,0.55)"
+            stroke="rgba(148,163,184,0.18)"
+            strokeWidth="0.3"
+          />
+          <rect width="100" height="62.5" fill="url(#map-glow)" />
+          <g fill="none" stroke="rgba(148,163,184,0.12)" strokeWidth="0.25">
+            <path d="M8 24 Q30 20 50 26 T92 22" />
+            <path d="M14 40 Q40 34 60 40 T86 34" />
+            <path d="M24 10 Q28 30 22 46" />
+            <path d="M52 10 Q48 30 54 56" />
+            <path d="M76 10 Q72 28 78 46" />
+          </g>
+        </svg>
+
+        <span className="absolute left-3 top-3 z-20 rounded-full bg-ink-900/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-300 backdrop-blur">
+          Map Preview · {LISTINGS.length} listings
+        </span>
+
+        {LISTINGS.map((l) => {
+          const { x, y } = projectToMap(l.coordinates)
+          const isActive = l.id === activeId
+          return (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => setActiveId(l.id)}
+              aria-pressed={isActive}
+              aria-label={`${l.title}, ${l.price}, ${l.location}`}
+              style={{ left: `${x}%`, top: `${y}%` }}
+              className={cn(
+                'absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold shadow-lg transition',
+                isActive
+                  ? 'z-20 scale-110 bg-accent-emerald text-ink-900 ring-4 ring-accent-emerald/25'
+                  : 'z-10 bg-ink-800 text-white ring-1 ring-white/15 hover:bg-accent-indigo',
+              )}
+            >
+              {l.price}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45',
+                  isActive ? 'bg-accent-emerald' : 'bg-ink-800',
+                )}
+              />
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Selected listing */}
+      <div className="flex flex-col rounded-2xl border border-white/5 bg-ink-800/60 p-4">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-ink-700">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={active.afterImage} alt={active.title} className="h-full w-full object-cover" />
+          {active.isVerifiedListing && (
+            <VerifiedListingBadge className="absolute left-3 top-3 bg-ink-900/80 backdrop-blur" />
+          )}
+        </div>
+        <h3 className="mt-4 font-semibold text-white">{active.title}</h3>
+        <p className="flex items-center gap-1 text-xs text-slate-400">
+          <MapPin className="h-3 w-3" /> {active.location}
+        </p>
+        <p className="mt-2 font-display text-xl font-bold text-accent-emerald-light">{active.price}</p>
+        <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
+          <button
+            type="button"
+            onClick={() => onView(active)}
+            className="rounded-lg border border-white/10 py-2 text-xs font-semibold text-white transition hover:bg-white/5"
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            onClick={() => onInquire(active)}
+            aria-haspopup="dialog"
+            className="flex items-center justify-center gap-1 rounded-lg bg-accent-indigo py-2 text-xs font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900"
+          >
+            <Send className="h-3.5 w-3.5" /> Inquire
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Marketplace() {
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
+  const [inquiryListing, setInquiryListing] = useState<Listing | null>(null)
+  const [view, setView] = useState<MarketplaceView>('grid')
 
   return (
     <section id="marketplace" className="bg-ink-900 py-24">
       <div className="mx-auto max-w-7xl px-6">
-        <h2 className="font-display text-3xl font-bold text-white">Interactive Listing Marketplace</h2>
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {LISTINGS.map((l) => (
-            <div key={l.id} className="rounded-2xl border border-white/5 bg-ink-800/60 p-4">
-              <BeforeAfterSlider beforeImage={l.beforeImage} afterImage={l.afterImage} alt={l.title} />
-              <div className="mt-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-white">{l.title}</h3>
-                  {l.seller.isVerifiedAgent && <BadgeCheck className="h-4 w-4 text-accent-emerald" title="Verified Broker" />}
-                </div>
-                <p className="text-xs text-slate-400">{l.location}</p>
-                <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3">
-                  <span className="font-display text-xl font-bold text-accent-emerald-light">{l.price}</span>
-                  <button onClick={() => setSelectedListing(l)} className="text-xs font-semibold text-accent-indigo-light">
-                    View Details &rarr;
-                  </button>
-                </div>
-              </div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-3xl font-bold text-white">Interactive Listing Marketplace</h2>
+            <p className="mt-1 text-sm text-slate-400">Drag any photo to compare the empty space with its AI-staged version.</p>
+          </div>
+          <ViewToggle view={view} onChange={setView} />
+        </div>
+        <div className="mt-8">
+          {view === 'grid' ? (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {LISTINGS.map((l) => (
+                <ListingCard key={l.id} listing={l} onView={() => setSelectedListing(l)} onInquire={() => setInquiryListing(l)} />
+              ))}
             </div>
-          ))}
+          ) : (
+            <MapPreview onView={setSelectedListing} onInquire={setInquiryListing} />
+          )}
         </div>
       </div>
       {selectedListing && <PropertyDetailModal listing={selectedListing} onClose={() => setSelectedListing(null)} />}
+      {inquiryListing && <InquiryModal listing={inquiryListing} onClose={() => setInquiryListing(null)} />}
     </section>
   )
 }
@@ -1328,6 +1666,98 @@ function ProSubscriptionModal({
   )
 }
 
+const TRADITIONAL_STAGING_PER_ROOM = 1500
+const AI_STAGING_PER_ROOM = 5
+
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+
+function StagingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => void }) {
+  const [rooms, setRooms] = useState(3)
+  const sliderId = useId()
+  const traditional = rooms * TRADITIONAL_STAGING_PER_ROOM
+  const ai = rooms * AI_STAGING_PER_ROOM
+  const savings = traditional - ai
+  const savingsPct = ((savings / traditional) * 100).toFixed(1)
+  const aiBarWidth = Math.max((ai / traditional) * 100, 1.5)
+  const fill = ((rooms - 1) / 9) * 100
+
+  return (
+    <div className="mx-auto mt-12 max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-ink-800 via-ink-800 to-accent-emerald/10 p-6 sm:p-8">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent-emerald-light">
+            <BarChart2 className="h-3.5 w-3.5" /> ROI Calculator
+          </p>
+          <h3 className="mt-1 font-display text-xl font-bold text-white sm:text-2xl">Virtual Staging Savings Calculator</h3>
+        </div>
+        <p className="text-xs text-slate-400">Traditional ~{usd.format(TRADITIONAL_STAGING_PER_ROOM)}/room vs AI {usd.format(AI_STAGING_PER_ROOM)}/room</p>
+      </div>
+
+      <div className="mt-6">
+        <div className="flex items-baseline justify-between">
+          <label htmlFor={sliderId} className="text-sm font-medium text-slate-300">Rooms to stage</label>
+          <span className="font-display text-2xl font-bold text-white" aria-hidden="true">
+            {rooms} <span className="text-sm font-medium text-slate-400">{rooms === 1 ? 'room' : 'rooms'}</span>
+          </span>
+        </div>
+        <input
+          id={sliderId}
+          type="range"
+          min={1}
+          max={10}
+          step={1}
+          value={rooms}
+          onChange={(e) => setRooms(Number(e.target.value))}
+          aria-valuetext={`${rooms} ${rooms === 1 ? 'room' : 'rooms'}`}
+          className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full accent-accent-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-emerald/50"
+          style={{ background: `linear-gradient(to right, #10b981 ${fill}%, rgba(255,255,255,0.1) ${fill}%)` }}
+        />
+        <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+          <span>1</span>
+          <span>10</span>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-300">Traditional staging</span>
+            <span className="font-semibold text-slate-200 tabular-nums">{usd.format(traditional)}</span>
+          </div>
+          <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-white/5">
+            <div className="h-full w-full rounded-full bg-gradient-to-r from-rose-500/70 to-amber-400/70" />
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-300">Aether Market AI Staging</span>
+            <span className="font-semibold text-accent-emerald-light tabular-nums">{usd.format(ai)}</span>
+          </div>
+          <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-white/5">
+            <div className="h-full rounded-full bg-accent-emerald transition-[width] duration-300" style={{ width: `${aiBarWidth}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-4 rounded-xl border border-accent-emerald/30 bg-accent-emerald/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div aria-live="polite">
+          <p className="text-xs font-medium text-accent-emerald-light">You save</p>
+          <p className="font-display text-3xl font-bold text-white tabular-nums">{usd.format(savings)}</p>
+          <p className="text-xs text-slate-400">{savingsPct}% less than traditional staging</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('staging-studio')}
+          className="flex items-center justify-center gap-2 rounded-xl bg-accent-emerald px-5 py-3 text-sm font-semibold text-ink-900 transition hover:bg-accent-emerald-light"
+        >
+          Stage {rooms} {rooms === 1 ? 'Room' : 'Rooms'} for {usd.format(ai)} <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mt-3 text-[11px] text-slate-500">Estimates only. Traditional staging costs vary by market and rental period.</p>
+    </div>
+  )
+}
+
 function Pricing({
   onNavigate,
   onSelectPlan,
@@ -1376,6 +1806,8 @@ function Pricing({
           <h2 className="mt-4 font-display text-3xl font-bold text-white sm:text-4xl">Simple, transparent pricing</h2>
           <p className="mt-3 text-slate-400">Start free, pay per listing, or scale with Pro. No hidden fees.</p>
         </div>
+
+        <StagingSavingsCalculator onNavigate={onNavigate} />
 
         <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-3">
           {PRICING_PLANS.map((plan) => (
