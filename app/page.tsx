@@ -714,6 +714,7 @@ function StageForm() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [generation, setGeneration] = useState<'idle' | 'generating' | 'ready'>('idle')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const fileInputId = useId()
 
@@ -725,6 +726,21 @@ function StageForm() {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  // Simulated AI generation: whenever a photo is uploaded (or the category /
+  // style changes with a photo loaded) show a processing state, then reveal a
+  // before/after comparison. Swap this timeout for a real staging API call.
+  useEffect(() => {
+    if (!previewUrl) {
+      setGeneration('idle')
+      return
+    }
+    setGeneration('generating')
+    const timer = window.setTimeout(() => setGeneration('ready'), 2500)
+    return () => window.clearTimeout(timer)
+  }, [previewUrl, category, style])
+
+  const stagedPreviewUrl = SAMPLE_RENDERS[category]
 
   const selectFile = (file: File | undefined) => {
     if (!file || !file.type.startsWith('image/')) return
@@ -756,7 +772,42 @@ function StageForm() {
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div className="relative">
+            {previewUrl && generation === 'ready' ? (
+              <>
+                <BeforeAfterSlider
+                  beforeImage={previewUrl}
+                  afterImage={stagedPreviewUrl}
+                  beforeLabel="Original"
+                  afterLabel="AI Staged"
+                  alt={fileName ?? 'Uploaded photo'}
+                  className="border border-accent-indigo/30"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className="flex items-center gap-1.5 text-xs text-accent-emerald-light">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> AI preview ready: {style}
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Replace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      aria-label="Remove selected photo"
+                      className="flex items-center justify-center rounded-lg border border-white/10 px-2 py-1.5 text-white transition hover:border-white/20 hover:bg-white/5"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
             <label
+              hidden={Boolean(previewUrl && generation === 'ready')}
               htmlFor={fileInputId}
               onDragOver={(e) => {
                 e.preventDefault()
@@ -769,7 +820,7 @@ function StageForm() {
                 selectFile(e.dataTransfer.files?.[0])
               }}
               className={cn(
-                'relative flex aspect-[4/3] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition focus-within:border-accent-indigo focus-within:ring-2 focus-within:ring-accent-indigo/40',
+                'relative flex aspect-[4/3] cursor-pointer [&[hidden]]:hidden flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition focus-within:border-accent-indigo focus-within:ring-2 focus-within:ring-accent-indigo/40',
                 previewUrl ? 'border-accent-indigo/40' : 'border-white/10 hover:border-accent-indigo/40',
                 isDragging && 'border-accent-indigo bg-accent-indigo/10',
               )}
@@ -786,9 +837,19 @@ function StageForm() {
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={previewUrl} alt={fileName ?? 'Selected photo preview'} className="absolute inset-0 h-full w-full object-cover" />
-                  <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 truncate bg-gradient-to-t from-ink-900/90 to-transparent px-3 pb-2 pt-6 text-xs font-semibold text-white">
-                    <RotateCcw className="h-3.5 w-3.5 shrink-0" /> Tap to replace photo
-                  </span>
+                  {generation === 'generating' && (
+                    <span
+                      role="status"
+                      aria-live="polite"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-900/75 backdrop-blur-sm"
+                    >
+                      <Loader2 className="h-8 w-8 animate-spin text-accent-indigo-light" />
+                      <span className="text-sm font-semibold text-white">Generating AI Staging Preview...</span>
+                      <span className="h-1 w-40 overflow-hidden rounded-full bg-white/10">
+                        <span className="block h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-accent-indigo to-accent-emerald" />
+                      </span>
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
@@ -798,7 +859,7 @@ function StageForm() {
                 </>
               )}
             </label>
-            {previewUrl && (
+            {previewUrl && generation !== 'ready' && (
               <button
                 type="button"
                 onClick={clearFile}
@@ -878,7 +939,10 @@ function StageForm() {
 // Pricing
 // ---------------------------------------------------------------------------
 
+type PricingPlanId = 'single-listing' | 'pro-subscription'
+
 type PricingPlan = {
+  id: PricingPlanId
   name: string
   price: string
   period: string
@@ -886,10 +950,17 @@ type PricingPlan = {
   features: string[]
   cta: string
   popular?: boolean
+  /**
+   * Optional Stripe Checkout / Payment Link URL. Set the matching
+   * NEXT_PUBLIC_* env var (Payment Links are public URLs) to go live,
+   * or replace `handleCheckout` below with a call to your own API endpoint.
+   */
+  checkoutUrl?: string
 }
 
 const PRICING_PLANS: PricingPlan[] = [
   {
+    id: 'single-listing',
     name: 'Single Listing',
     price: '$5',
     period: '/ per listing',
@@ -901,8 +972,10 @@ const PRICING_PLANS: PricingPlan[] = [
       'HD Image Support',
     ],
     cta: 'Get Started',
+    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_SINGLE_LISTING_URL,
   },
   {
+    id: 'pro-subscription',
     name: 'Pro Subscription',
     price: '$99',
     period: '/ month',
@@ -915,10 +988,47 @@ const PRICING_PLANS: PricingPlan[] = [
     ],
     cta: 'Subscribe Now',
     popular: true,
+    checkoutUrl: process.env.NEXT_PUBLIC_STRIPE_PRO_SUBSCRIPTION_URL,
   },
 ]
 
-function Pricing({ onNavigate }: { onNavigate: (id: string) => void }) {
+function Pricing({
+  onNavigate,
+  onSelectPlan,
+}: {
+  onNavigate: (id: string) => void
+  /** Override to call a Stripe Checkout API endpoint, track analytics, etc. */
+  onSelectPlan?: (plan: PricingPlan) => void | Promise<void>
+}) {
+  const [pendingPlan, setPendingPlan] = useState<PricingPlanId | null>(null)
+
+  // Re-enable the buttons if the visitor returns from Stripe via the back button.
+  useEffect(() => {
+    const reset = () => setPendingPlan(null)
+    window.addEventListener('pageshow', reset)
+    return () => window.removeEventListener('pageshow', reset)
+  }, [])
+
+  // Default behaviour: redirect to the plan's Stripe URL if one is configured,
+  // otherwise send the visitor to the staging studio.
+  const handleCheckout = async (plan: PricingPlan) => {
+    if (onSelectPlan) {
+      setPendingPlan(plan.id)
+      try {
+        await onSelectPlan(plan)
+      } finally {
+        setPendingPlan(null)
+      }
+      return
+    }
+    if (plan.checkoutUrl) {
+      setPendingPlan(plan.id)
+      window.location.href = plan.checkoutUrl
+      return
+    }
+    onNavigate('stage')
+  }
+
   return (
     <section id="pricing" className="bg-ink-900 py-24">
       <div className="mx-auto max-w-7xl px-6">
@@ -973,15 +1083,26 @@ function Pricing({ onNavigate }: { onNavigate: (id: string) => void }) {
 
               <button
                 type="button"
-                onClick={() => onNavigate('stage')}
+                onClick={() => handleCheckout(plan)}
+                disabled={pendingPlan !== null}
+                aria-busy={pendingPlan === plan.id}
+                data-plan={plan.id}
                 className={cn(
-                  'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition',
+                  'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition disabled:cursor-wait disabled:opacity-70',
                   plan.popular
                     ? 'bg-accent-indigo text-white hover:bg-accent-indigo-light hover:text-ink-900'
                     : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
                 )}
               >
-                {plan.cta} <ArrowRight className="h-4 w-4" />
+                {pendingPlan === plan.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Redirecting...
+                  </>
+                ) : (
+                  <>
+                    {plan.cta} <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </div>
           ))}
