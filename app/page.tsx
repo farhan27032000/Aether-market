@@ -711,8 +711,37 @@ function StageForm() {
   const [style, setStyle] = useState<StagingStyle>('Modern')
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [email, setEmail] = useState('')
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputId = useId()
 
   const isLand = category === 'Raw Land / Plot' || category === 'Exterior & Lawn'
+
+  // Release the object URL when it is replaced or the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  const selectFile = (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return
+    setPreviewUrl(URL.createObjectURL(file))
+    setFileName(file.name)
+  }
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    selectFile(e.target.files?.[0])
+  }
+
+  const clearFile = () => {
+    setPreviewUrl(null)
+    setFileName(null)
+    // Reset so choosing the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const handleCategoryChange = (cat: SpaceCategory) => {
     setCategory(cat)
@@ -726,9 +755,59 @@ function StageForm() {
         <p className="mt-1 text-xs text-slate-400">Upload a room or raw land plot photo to generate instant AI previews.</p>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          <div className="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/10 hover:border-accent-indigo/40">
-            <ImagePlus className="h-8 w-8 text-accent-indigo-light" />
-            <span className="mt-2 text-xs font-semibold text-white">{isLand ? 'Upload Raw Land Photo' : 'Upload Room Photo'}</span>
+          <div className="relative">
+            <label
+              htmlFor={fileInputId}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setIsDragging(true)
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsDragging(false)
+                selectFile(e.dataTransfer.files?.[0])
+              }}
+              className={cn(
+                'relative flex aspect-[4/3] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition focus-within:border-accent-indigo focus-within:ring-2 focus-within:ring-accent-indigo/40',
+                previewUrl ? 'border-accent-indigo/40' : 'border-white/10 hover:border-accent-indigo/40',
+                isDragging && 'border-accent-indigo bg-accent-indigo/10',
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                id={fileInputId}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="sr-only"
+              />
+              {previewUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={previewUrl} alt={fileName ?? 'Selected photo preview'} className="absolute inset-0 h-full w-full object-cover" />
+                  <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 truncate bg-gradient-to-t from-ink-900/90 to-transparent px-3 pb-2 pt-6 text-xs font-semibold text-white">
+                    <RotateCcw className="h-3.5 w-3.5 shrink-0" /> Tap to replace photo
+                  </span>
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="h-8 w-8 text-accent-indigo-light" />
+                  <span className="mt-2 text-xs font-semibold text-white">{isLand ? 'Upload Raw Land Photo' : 'Upload Room Photo'}</span>
+                  <span className="mt-1 text-[11px] text-slate-500">Tap, click, or drop an image</span>
+                </>
+              )}
+            </label>
+            {previewUrl && (
+              <button
+                type="button"
+                onClick={clearFile}
+                aria-label="Remove selected photo"
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-ink-900/80 text-white backdrop-blur transition hover:bg-ink-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">
