@@ -2187,20 +2187,22 @@ function ProSubscriptionModal({
   )
 }
 
-const TRADITIONAL_STAGING_PER_ROOM = 1500
-const AI_STAGING_PER_ROOM = 5
+const TRADITIONAL_COST_PER_LISTING = 50
+const AETHER_COST_PER_LISTING = 5
+const MAX_LISTINGS = 20
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
-function StagingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => void }) {
-  const [rooms, setRooms] = useState(3)
+function ListingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => void }) {
+  const [listings, setListings] = useState(3)
   const sliderId = useId()
-  const traditional = rooms * TRADITIONAL_STAGING_PER_ROOM
-  const ai = rooms * AI_STAGING_PER_ROOM
-  const savings = traditional - ai
-  const savingsPct = ((savings / traditional) * 100).toFixed(1)
-  const aiBarWidth = Math.max((ai / traditional) * 100, 1.5)
-  const fill = ((rooms - 1) / 9) * 100
+  const traditional = listings * TRADITIONAL_COST_PER_LISTING
+  const aether = listings * AETHER_COST_PER_LISTING
+  const savings = traditional - aether
+  const savingsPct = Math.round((savings / traditional) * 100)
+  const aetherBarWidth = Math.max((aether / traditional) * 100, 1.5)
+  const fill = ((listings - 1) / (MAX_LISTINGS - 1)) * 100
+  const listingWord = listings === 1 ? 'listing' : 'listings'
 
   return (
     <div className="mx-auto mt-12 max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-ink-800 via-ink-800 to-accent-emerald/10 p-6 sm:p-8">
@@ -2209,40 +2211,40 @@ function StagingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => 
           <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent-emerald-light">
             <BarChart2 className="h-3.5 w-3.5" /> ROI Calculator
           </p>
-          <h3 className="mt-1 font-display text-xl font-bold text-white sm:text-2xl">Virtual Staging Savings Calculator</h3>
+          <h3 className="mt-1 font-display text-xl font-bold text-white sm:text-2xl">Listing Savings Calculator</h3>
         </div>
-        <p className="text-xs text-slate-400">Traditional ~{usd.format(TRADITIONAL_STAGING_PER_ROOM)}/room vs AI {usd.format(AI_STAGING_PER_ROOM)}/room</p>
+        <p className="text-xs text-slate-400">Traditional Classifieds &amp; Agency Ads vs. Aether Market</p>
       </div>
 
       <div className="mt-6">
         <div className="flex items-baseline justify-between">
-          <label htmlFor={sliderId} className="text-sm font-medium text-slate-300">Rooms to stage</label>
+          <label htmlFor={sliderId} className="text-sm font-medium text-slate-300">Number of Listings</label>
           <span className="font-display text-2xl font-bold text-white" aria-hidden="true">
-            {rooms} <span className="text-sm font-medium text-slate-400">{rooms === 1 ? 'room' : 'rooms'}</span>
+            {listings} <span className="text-sm font-medium text-slate-400">{listingWord}</span>
           </span>
         </div>
         <input
           id={sliderId}
           type="range"
           min={1}
-          max={10}
+          max={MAX_LISTINGS}
           step={1}
-          value={rooms}
-          onChange={(e) => setRooms(Number(e.target.value))}
-          aria-valuetext={`${rooms} ${rooms === 1 ? 'room' : 'rooms'}`}
+          value={listings}
+          onChange={(e) => setListings(Number(e.target.value))}
+          aria-valuetext={`${listings} ${listingWord}`}
           className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full accent-accent-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-emerald/50"
           style={{ background: `linear-gradient(to right, #10b981 ${fill}%, rgba(255,255,255,0.1) ${fill}%)` }}
         />
         <div className="mt-1 flex justify-between text-[11px] text-slate-500">
           <span>1</span>
-          <span>10</span>
+          <span>{MAX_LISTINGS}</span>
         </div>
       </div>
 
       <div className="mt-6 space-y-4">
         <div>
           <div className="flex justify-between text-sm">
-            <span className="text-slate-300">Traditional staging</span>
+            <span className="text-slate-300">Traditional advertising <span className="text-slate-500">({usd.format(TRADITIONAL_COST_PER_LISTING)}/listing)</span></span>
             <span className="font-semibold text-slate-200 tabular-nums">{usd.format(traditional)}</span>
           </div>
           <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-white/5">
@@ -2251,11 +2253,11 @@ function StagingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => 
         </div>
         <div>
           <div className="flex justify-between text-sm">
-            <span className="text-slate-300">Aether Market AI Staging</span>
-            <span className="font-semibold text-accent-emerald-light tabular-nums">{usd.format(ai)}</span>
+            <span className="text-slate-300">Aether Market <span className="text-slate-500">({usd.format(AETHER_COST_PER_LISTING)}/listing)</span></span>
+            <span className="font-semibold text-accent-emerald-light tabular-nums">{usd.format(aether)}</span>
           </div>
           <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-white/5">
-            <div className="h-full rounded-full bg-accent-emerald transition-[width] duration-300" style={{ width: `${aiBarWidth}%` }} />
+            <div className="h-full rounded-full bg-accent-emerald transition-[width] duration-300" style={{ width: `${aetherBarWidth}%` }} />
           </div>
         </div>
       </div>
@@ -2264,17 +2266,17 @@ function StagingSavingsCalculator({ onNavigate }: { onNavigate: (id: string) => 
         <div aria-live="polite">
           <p className="text-xs font-medium text-accent-emerald-light">You save</p>
           <p className="font-display text-3xl font-bold text-white tabular-nums">{usd.format(savings)}</p>
-          <p className="text-xs text-slate-400">{savingsPct}% less than traditional staging</p>
+          <p className="text-xs text-slate-400">{savingsPct}% less than traditional advertising</p>
         </div>
         <button
           type="button"
           onClick={() => onNavigate('staging-studio')}
           className="flex items-center justify-center gap-2 rounded-xl bg-accent-emerald px-5 py-3 text-sm font-semibold text-ink-900 transition hover:bg-accent-emerald-light"
         >
-          Stage {rooms} {rooms === 1 ? 'Room' : 'Rooms'} for {usd.format(ai)} <ArrowRight className="h-4 w-4" />
+          {listings === 1 ? 'Post Listing' : `Post ${listings} Listings`} for {usd.format(aether)} <ArrowRight className="h-4 w-4" />
         </button>
       </div>
-      <p className="mt-3 text-[11px] text-slate-500">Estimates only. Traditional staging costs vary by market and rental period.</p>
+      <p className="mt-3 text-[11px] text-slate-500">Estimates only. Traditional classified and agency ad prices vary by platform and market.</p>
     </div>
   )
 }
@@ -2336,7 +2338,7 @@ function Pricing({
           <p className="mt-3 text-slate-400">Start free, pay per listing, get verified as a local business, or scale with Pro. No hidden fees.</p>
         </div>
 
-        <StagingSavingsCalculator onNavigate={onNavigate} />
+        <ListingSavingsCalculator onNavigate={onNavigate} />
 
         <div className="mx-auto mt-12 grid max-w-7xl gap-6 md:grid-cols-2 xl:grid-cols-4">
           {PRICING_PLANS.map((plan) => (
