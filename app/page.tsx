@@ -992,6 +992,132 @@ const PRICING_PLANS: PricingPlan[] = [
   },
 ]
 
+type CheckoutStatus = 'redirecting' | 'unavailable' | 'error'
+
+function ProSubscriptionModal({
+  plan,
+  onClose,
+  onCheckout,
+}: {
+  plan: PricingPlan
+  onClose: () => void
+  onCheckout?: (plan: PricingPlan) => void | Promise<void>
+}) {
+  const [status, setStatus] = useState<CheckoutStatus>('redirecting')
+  const [attempt, setAttempt] = useState(0)
+  // Keep the latest handler in a ref so an inline prop doesn't restart the timer.
+  const onCheckoutRef = useRef(onCheckout)
+  onCheckoutRef.current = onCheckout
+
+  // Show the "Redirecting to Checkout..." state briefly, then hand off to
+  // Stripe: a custom checkout handler, then the configured Checkout URL.
+  useEffect(() => {
+    let cancelled = false
+    setStatus('redirecting')
+    const timer = window.setTimeout(async () => {
+      const checkout = onCheckoutRef.current
+      if (checkout) {
+        try {
+          await checkout(plan)
+        } catch {
+          if (!cancelled) setStatus('error')
+        }
+        return
+      }
+      if (plan.checkoutUrl) {
+        window.location.href = plan.checkoutUrl
+        return
+      }
+      if (!cancelled) setStatus('unavailable')
+    }, 1800)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [plan, attempt])
+
+  return (
+    <Modal title="Pro Agency Account Setup" onClose={onClose} className="sm:max-w-md">
+      <div className="space-y-6 p-6">
+        <div className="flex items-center gap-4 rounded-xl border border-accent-indigo/30 bg-gradient-to-br from-accent-indigo/15 to-transparent p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent-indigo to-accent-emerald">
+            <Building2 className="h-5 w-5 text-white" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-white">{plan.name}</p>
+            <p className="text-sm text-slate-400">
+              <span className="font-display text-lg font-bold text-white">{plan.price}</span> {plan.period}
+            </p>
+          </div>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-indigo/20 px-2.5 py-1 text-[11px] font-semibold text-accent-indigo-light">
+            <Star className="h-3 w-3 fill-current" /> Popular
+          </span>
+        </div>
+
+        <ul className="space-y-2.5">
+          {plan.features.map((feature) => (
+            <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-300">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent-indigo-light" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        <div role="status" aria-live="polite" className="rounded-xl border border-white/5 bg-ink-900/60 p-4">
+          {status === 'redirecting' && (
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-accent-indigo-light" />
+              <div>
+                <p className="text-sm font-semibold text-white">Redirecting to Checkout...</p>
+                <p className="text-xs text-slate-400">Preparing your secure Pro agency checkout.</p>
+              </div>
+            </div>
+          )}
+          {status === 'unavailable' && (
+            <div className="flex items-start gap-3">
+              <Lock className="mt-0.5 h-5 w-5 shrink-0 text-accent-emerald-light" />
+              <div>
+                <p className="text-sm font-semibold text-white">Secure checkout is almost ready</p>
+                <p className="text-xs text-slate-400">
+                  Online payments for Pro agency accounts are launching soon. Your plan details are saved here.
+                </p>
+              </div>
+            </div>
+          )}
+          {status === 'error' && (
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+              <div>
+                <p className="text-sm font-semibold text-white">We couldn&apos;t start checkout</p>
+                <p className="text-xs text-slate-400">Please try again in a moment.</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/5"
+          >
+            {status === 'redirecting' ? 'Cancel' : 'Close'}
+          </button>
+          {status === 'error' && (
+            <button
+              type="button"
+              onClick={() => setAttempt((n) => n + 1)}
+              className="flex-1 rounded-xl bg-accent-indigo py-3 text-sm font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900"
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function Pricing({
   onNavigate,
   onSelectPlan,
@@ -1000,37 +1126,28 @@ function Pricing({
   /** Override to call a Stripe Checkout API endpoint, track analytics, etc. */
   onSelectPlan?: (plan: PricingPlan) => void | Promise<void>
 }) {
-  const [pendingPlan, setPendingPlan] = useState<PricingPlanId | null>(null)
+  const [proModalPlan, setProModalPlan] = useState<PricingPlan | null>(null)
 
-  // Re-enable the buttons if the visitor returns from Stripe via the back button.
+  // Close the Pro modal if the visitor returns from Stripe via the back button.
   useEffect(() => {
-    const reset = () => setPendingPlan(null)
+    const reset = (e: PageTransitionEvent) => {
+      if (e.persisted) setProModalPlan(null)
+    }
     window.addEventListener('pageshow', reset)
     return () => window.removeEventListener('pageshow', reset)
   }, [])
 
-  // Smoothly scroll down to the AI Staging & Architectural Studio.
-  const scrollToStagingStudio = () => onNavigate('staging-studio')
-
-  // Click handler for both pricing buttons. Scrolls to the staging studio by
-  // default; redirects to Stripe only once a checkout URL or `onSelectPlan`
-  // handler has been configured.
-  const handleCheckout = async (plan: PricingPlan) => {
-    if (onSelectPlan) {
-      setPendingPlan(plan.id)
-      try {
-        await onSelectPlan(plan)
-      } finally {
-        setPendingPlan(null)
-      }
+  // Each plan has its own action:
+  // - Single Listing: smoothly scroll to the AI Staging & Architectural Studio
+  //   so the visitor can upload and stage an individual photo.
+  // - Pro Subscription: open the Pro agency setup modal, which hands off to
+  //   Stripe checkout once it is configured.
+  const handlePlanClick = (plan: PricingPlan) => {
+    if (plan.id === 'pro-subscription') {
+      setProModalPlan(plan)
       return
     }
-    if (plan.checkoutUrl) {
-      setPendingPlan(plan.id)
-      window.location.href = plan.checkoutUrl
-      return
-    }
-    scrollToStagingStudio()
+    onNavigate('staging-studio')
   }
 
   return (
@@ -1087,31 +1204,25 @@ function Pricing({
 
               <button
                 type="button"
-                onClick={() => handleCheckout(plan)}
-                disabled={pendingPlan !== null}
-                aria-busy={pendingPlan === plan.id}
+                onClick={() => handlePlanClick(plan)}
+                aria-haspopup={plan.id === 'pro-subscription' ? 'dialog' : undefined}
                 data-plan={plan.id}
                 className={cn(
-                  'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition disabled:cursor-wait disabled:opacity-70',
+                  'mt-8 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-semibold transition',
                   plan.popular
                     ? 'bg-accent-indigo text-white hover:bg-accent-indigo-light hover:text-ink-900'
                     : 'border border-white/10 text-white hover:border-white/20 hover:bg-white/5',
                 )}
               >
-                {pendingPlan === plan.id ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Redirecting...
-                  </>
-                ) : (
-                  <>
-                    {plan.cta} <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
+                {plan.cta} <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           ))}
         </div>
       </div>
+      {proModalPlan && (
+        <ProSubscriptionModal plan={proModalPlan} onClose={() => setProModalPlan(null)} onCheckout={onSelectPlan} />
+      )}
     </section>
   )
 }
