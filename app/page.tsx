@@ -89,6 +89,9 @@ const ALL_COUNTRIES: readonly { code: CountryCode; name: string; flag: string }[
   (g): readonly { code: CountryCode; name: string; flag: string }[] => g.countries,
 )
 
+// Shortlist shown in the Hero search bar's country dropdown.
+const HERO_COUNTRY_CODES: readonly CountryCode[] = ['US', 'GB', 'AE', 'SA', 'QA', 'SG', 'JP', 'DE', 'CA', 'AU']
+
 function countryLabel(code: CountryFilter) {
   if (code === 'all') return 'All Countries'
   return ALL_COUNTRIES.find((c) => c.code === code)?.name ?? code
@@ -1123,7 +1126,91 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
   )
 }
 
-function Hero({ onNavigate, onBrowseCategory }: { onNavigate: (id: string) => void; onBrowseCategory: (c: MarketFilter) => void }) {
+function HeroSearchBar({
+  query,
+  onQueryChange,
+  country,
+  onCountryChange,
+  onSubmit,
+}: {
+  query: string
+  onQueryChange: (v: string) => void
+  country: CountryFilter
+  onCountryChange: (v: CountryFilter) => void
+  onSubmit: () => void
+}) {
+  const id = useId()
+  // Keep the current selection visible even if it was picked from the fuller list in the marketplace bar.
+  const codes = country === 'all' || HERO_COUNTRY_CODES.includes(country) ? HERO_COUNTRY_CODES : [...HERO_COUNTRY_CODES, country]
+  return (
+    <form
+      role="search"
+      aria-label="Search the marketplace"
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit()
+      }}
+      className="mx-auto mt-8 flex max-w-3xl flex-col gap-2 rounded-2xl border border-white/10 bg-ink-800/80 p-2 text-left shadow-2xl shadow-violet-900/20 backdrop-blur sm:flex-row sm:items-center"
+    >
+      <label htmlFor={`${id}-q`} className="sr-only">Search listings</label>
+      <div className="relative min-w-0 flex-1">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <input
+          id={`${id}-q`}
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search properties, vehicles, machinery, tech..."
+          className="w-full rounded-xl bg-ink-700 py-3 pl-9 pr-3 text-base text-white placeholder:text-slate-500 outline-none ring-violet-500/50 focus:ring-2 sm:text-sm"
+        />
+      </div>
+      <label htmlFor={`${id}-country`} className="sr-only">Country</label>
+      <div className="relative w-full sm:w-56 sm:shrink-0">
+        <select
+          id={`${id}-country`}
+          value={country}
+          onChange={(e) => onCountryChange(e.target.value as CountryFilter)}
+          className="w-full max-w-full appearance-none truncate rounded-xl bg-ink-700 py-3 pl-3 pr-9 text-base text-white outline-none ring-violet-500/50 focus:ring-2 sm:text-sm"
+        >
+          <option value="all">🌐 All Countries (Global)</option>
+          {codes.map((code) => {
+            const c = ALL_COUNTRIES.find((x) => x.code === code)
+            return c ? (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.name}
+              </option>
+            ) : null
+          })}
+        </select>
+        <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </div>
+      <button
+        type="submit"
+        className="flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition hover:bg-violet-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+      >
+        <Search aria-hidden="true" className="h-4 w-4" /> Search
+      </button>
+    </form>
+  )
+}
+
+function Hero({
+  onNavigate,
+  onBrowseCategory,
+  query,
+  onQueryChange,
+  country,
+  onCountryChange,
+}: {
+  onNavigate: (id: string) => void
+  onBrowseCategory: (c: MarketFilter) => void
+  query: string
+  onQueryChange: (v: string) => void
+  country: CountryFilter
+  onCountryChange: (v: CountryFilter) => void
+}) {
   return (
     <section className="relative overflow-hidden py-24">
       <div className="mx-auto max-w-7xl px-6 text-center">
@@ -1136,6 +1223,13 @@ function Hero({ onNavigate, onBrowseCategory }: { onNavigate: (id: string) => vo
         <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
           The modern marketplace for real estate, vehicles, industrial machinery, electronics, and commercial inventory.
         </p>
+        <HeroSearchBar
+          query={query}
+          onQueryChange={onQueryChange}
+          country={country}
+          onCountryChange={onCountryChange}
+          onSubmit={() => onNavigate('marketplace')}
+        />
         <div className="mt-8 flex justify-center gap-4">
           <button onClick={() => onNavigate('staging-studio')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
             Sell & Enhance an Item
@@ -1538,13 +1632,24 @@ function CategoryFilterBar({ value, onChange, pool }: { value: MarketFilter; onC
   )
 }
 
-function Marketplace({ filter, onFilterChange }: { filter: MarketFilter; onFilterChange: (v: MarketFilter) => void }) {
+function Marketplace({
+  filter,
+  onFilterChange,
+  query,
+  onQueryChange: setQuery,
+  country,
+  onCountryChange: setCountry,
+}: {
+  filter: MarketFilter
+  onFilterChange: (v: MarketFilter) => void
+  query: string
+  onQueryChange: (v: string) => void
+  country: CountryFilter
+  onCountryChange: (v: CountryFilter) => void
+}) {
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
   const [inquiryListing, setInquiryListing] = useState<Listing | null>(null)
   const [view, setView] = useState<MarketplaceView>('grid')
-
-  const [query, setQuery] = useState('')
-  const [country, setCountry] = useState<CountryFilter>('all')
 
   // Listings matching the search bar (keyword + country), before the category tabs are applied.
   const pool = useMemo(() => {
@@ -2691,6 +2796,9 @@ export default function App() {
   const [verifyModalOpen, setVerifyModalOpen] = useState(false)
   const [verifiedSellerOpen, setVerifiedSellerOpen] = useState(false)
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all')
+  // Shared by the Hero search bar and the marketplace search bar so both stay in sync.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchCountry, setSearchCountry] = useState<CountryFilter>('all')
   const navigate = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
   // Close the Verified Seller checkout if the visitor returns from Stripe via the back button.
@@ -2712,8 +2820,19 @@ export default function App() {
             setMarketFilter(c)
             navigate('marketplace')
           }}
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          country={searchCountry}
+          onCountryChange={setSearchCountry}
         />
-        <Marketplace filter={marketFilter} onFilterChange={setMarketFilter} />
+        <Marketplace
+          filter={marketFilter}
+          onFilterChange={setMarketFilter}
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          country={searchCountry}
+          onCountryChange={setSearchCountry}
+        />
         <StageForm />
         <Pricing onNavigate={navigate} onGetVerified={() => setVerifiedSellerOpen(true)} />
       </main>
