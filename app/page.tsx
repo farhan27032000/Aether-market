@@ -3,6 +3,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Phone, Car, Cpu, Factory, Tag } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -446,6 +447,155 @@ const LISTINGS: Listing[] = [
     coordinates: { lat: 1.3, lng: 103.84 },
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Supabase listings
+// ---------------------------------------------------------------------------
+
+/** Row shape of the Supabase `listings` table (see supabase/listings.sql). */
+interface ListingRow {
+  id: string | number
+  title: string
+  location: string | null
+  country: string | null
+  market_category: string | null
+  subcategory: string | null
+  condition: string | null
+  price: string | null
+  description: string | null
+  image_url: string | null
+  seller_name: string | null
+  seller_phone: string | null
+  latitude: number | null
+  longitude: number | null
+  created_at: string | null
+}
+
+type NewListingRow = Omit<ListingRow, 'id' | 'created_at'>
+
+const LISTING_IMAGES_BUCKET = 'listing-images'
+const LISTING_PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80'
+
+/** Approximate country centres, used to pin listings without exact coordinates in Map View. */
+const COUNTRY_CENTERS: Record<CountryCode, { lat: number; lng: number }> = {
+  AE: { lat: 24.45, lng: 54.38 },
+  SA: { lat: 24.71, lng: 46.68 },
+  QA: { lat: 25.29, lng: 51.53 },
+  KW: { lat: 29.38, lng: 47.99 },
+  BH: { lat: 26.23, lng: 50.59 },
+  OM: { lat: 23.59, lng: 58.41 },
+  SG: { lat: 1.35, lng: 103.82 },
+  JP: { lat: 35.68, lng: 139.69 },
+  KR: { lat: 37.57, lng: 126.98 },
+  MY: { lat: 3.14, lng: 101.69 },
+  TH: { lat: 13.76, lng: 100.5 },
+  IN: { lat: 28.61, lng: 77.21 },
+  ID: { lat: -6.21, lng: 106.85 },
+  VN: { lat: 21.03, lng: 105.85 },
+  PH: { lat: 14.6, lng: 120.98 },
+  US: { lat: 39.83, lng: -98.58 },
+  GB: { lat: 51.51, lng: -0.13 },
+  CA: { lat: 45.42, lng: -75.7 },
+  DE: { lat: 52.52, lng: 13.4 },
+  FR: { lat: 48.86, lng: 2.35 },
+  AU: { lat: -35.28, lng: 149.13 },
+}
+
+function isCountryCode(value: string | null): value is CountryCode {
+  return ALL_COUNTRIES.some((c) => c.code === value)
+}
+
+function isMarketCategory(value: string | null): value is MarketCategory {
+  return MARKET_CATEGORIES.some((c) => c.value !== 'all' && c.value === value)
+}
+
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+}
+
+function rowToListing(row: ListingRow): Listing {
+  const country = isCountryCode(row.country) ? row.country : 'US'
+  const sellerName = row.seller_name?.trim() || 'Aether Seller'
+  const createdAt = row.created_at ? new Date(row.created_at).getTime() : Date.now()
+  return {
+    id: `db-${row.id}`,
+    title: row.title,
+    location: row.location?.trim() || countryLabel(country),
+    country,
+    marketCategory: isMarketCategory(row.market_category) ? row.market_category : 'services',
+    subcategory: row.subcategory?.trim() || 'Direct Listing',
+    condition: row.condition?.trim() || 'Original photo',
+    price: row.price?.trim() || 'Price on request',
+    specs: [],
+    image: row.image_url || LISTING_PLACEHOLDER_IMAGE,
+    description: row.description ?? '',
+    features: [],
+    seller: {
+      name: sellerName,
+      agency: 'Independent Seller',
+      initials: initialsOf(sellerName) || 'AS',
+      responseTime: '~1 hr',
+      phone: row.seller_phone || undefined,
+    },
+    listedDaysAgo: Math.max(0, Math.floor((Date.now() - createdAt) / 86_400_000)),
+    coordinates:
+      row.latitude != null && row.longitude != null ? { lat: row.latitude, lng: row.longitude } : COUNTRY_CENTERS[country],
+  }
+}
+
+/** Escapes LIKE wildcards so user input is matched literally by `.ilike()`. */
+function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
+/** Fetches listings from Supabase, filtered by country and title search. Empty when Supabase is not configured. */
+function useSupabaseListings(query: string, country: CountryFilter, refreshKey: number) {
+  const [listings, setListings] = useState<Listing[]>([])
+  const [loading, setLoading] = useState(isSupabaseConfigured)
+
+  useEffect(() => {
+    const client = supabase
+    if (!client) return
+    let cancelled = false
+    setLoading(true)
+    // Debounce so typing in the search bar doesn't fire a request per keystroke.
+    const timer = window.setTimeout(async () => {
+      let request = client.from('listings').select('*')
+      if (country !== 'all') request = request.eq('country', country)
+      const q = query.trim()
+      if (q) request = request.ilike('title', `%${escapeLike(q)}%`)
+      const { data, error } = await request.order('created_at', { ascending: false }).limit(100)
+      if (cancelled) return
+      if (error) console.error('Failed to load Supabase listings:', error.message)
+      setListings(error || !data ? [] : (data as ListingRow[]).map(rowToListing))
+      setLoading(false)
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [query, country, refreshKey])
+
+  return { listings, loading }
+}
+
+/** Uploads the original photo to Supabase Storage. Returns null if the bucket is missing or the upload fails. */
+async function uploadListingImage(file: File | null): Promise<string | null> {
+  if (!supabase || !file) return null
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const path = `direct/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`
+  const { error } = await supabase.storage.from(LISTING_IMAGES_BUCKET).upload(path, file, { contentType: file.type })
+  if (error) {
+    console.warn('Listing photo upload skipped:', error.message)
+    return null
+  }
+  return supabase.storage.from(LISTING_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl
+}
 
 // ---------------------------------------------------------------------------
 // Modal & Verification Components
@@ -1639,6 +1789,7 @@ function Marketplace({
   onQueryChange: setQuery,
   country,
   onCountryChange: setCountry,
+  refreshKey,
 }: {
   filter: MarketFilter
   onFilterChange: (v: MarketFilter) => void
@@ -1646,13 +1797,17 @@ function Marketplace({
   onQueryChange: (v: string) => void
   country: CountryFilter
   onCountryChange: (v: CountryFilter) => void
+  /** Bump to re-fetch listings from Supabase, e.g. after a new listing is published. */
+  refreshKey: number
 }) {
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
   const [inquiryListing, setInquiryListing] = useState<Listing | null>(null)
   const [view, setView] = useState<MarketplaceView>('grid')
 
-  // Listings matching the search bar (keyword + country), before the category tabs are applied.
-  const pool = useMemo(() => {
+  const remote = useSupabaseListings(query, country, refreshKey)
+
+  // Demo listings matching the search bar (keyword + country), used when Supabase returns nothing.
+  const demoPool = useMemo(() => {
     const q = query.trim().toLowerCase()
     return LISTINGS.filter((l) => {
       if (country !== 'all' && l.country !== country) return false
@@ -1660,6 +1815,10 @@ function Marketplace({
       return [l.title, l.location, l.subcategory, countryLabel(l.country), ...l.specs].some((t) => t.toLowerCase().includes(q))
     })
   }, [query, country])
+
+  // Listings matching the search bar, before the category tabs are applied.
+  const isLive = remote.listings.length > 0
+  const pool = isLive ? remote.listings : demoPool
 
   const visible = useMemo(
     () =>
@@ -1696,6 +1855,7 @@ function Marketplace({
 
         <p className="mt-4 text-xs text-slate-500" aria-live="polite">
           Showing {visible.length} {visible.length === 1 ? 'item' : 'items'} in {filterLabel} · {scopeLabel}
+          {remote.loading ? ' · Loading live listings…' : isLive ? ' · Live listings' : ' · Sample listings'}
         </p>
 
         <div className="mt-4">
@@ -1779,13 +1939,23 @@ const ENHANCER_PRESETS: EnhancerPreset[] = [
   },
 ]
 
-function StageForm() {
+const PRESET_MARKET_CATEGORY: Record<EnhancerPresetId, MarketCategory> = {
+  'interior-staging': 'real-estate',
+  'ecommerce-backdrop': 'electronics',
+  'vehicle-lighting': 'vehicles',
+  'showroom-display': 'industrial',
+}
+
+function StageForm({ onPublished }: { onPublished?: (listing: Listing) => void }) {
   const [presetId, setPresetId] = useState<EnhancerPresetId>('interior-staging')
   const [style, setStyle] = useState<string>(ENHANCER_PRESETS[0].variants[0])
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [publishModalOpen, setPublishModalOpen] = useState(false)
+  const [publishedListing, setPublishedListing] = useState<Listing | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   // After upload the studio waits for the user to pick AI staging or a direct publish.
   const [mode, setMode] = useState<StudioMode>('awaiting-choice')
@@ -1819,6 +1989,8 @@ function StageForm() {
     if (!file || !file.type.startsWith('image/')) return
     setPreviewUrl(URL.createObjectURL(file))
     setFileName(file.name)
+    setSelectedFile(file)
+    setPublishedListing(null)
     setMode('awaiting-choice')
   }
 
@@ -1831,6 +2003,8 @@ function StageForm() {
   const clearFile = () => {
     setPreviewUrl(null)
     setFileName(null)
+    setSelectedFile(null)
+    setPublishedListing(null)
     setMode('awaiting-choice')
     // Reset so choosing the same file again still fires onChange.
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -1845,6 +2019,7 @@ function StageForm() {
   const publishDirect = () => {
     if (!previewUrl) return
     setMode('direct')
+    if (!publishedListing) setPublishModalOpen(true)
   }
 
   // Re-render the AI preview if the category or style changes after staging.
@@ -1916,15 +2091,25 @@ function StageForm() {
                     </span>
                   </div>
                   <div className="mt-4">
-                    <h3 className="font-semibold text-white">{preset.subject} Listing</h3>
+                    <h3 className="font-semibold text-white">{publishedListing?.title ?? `${preset.subject} Listing`}</h3>
                     <p className="flex items-center gap-1 text-xs text-slate-400">
-                      <MapPin className="h-3 w-3" /> Location added at publish
+                      <MapPin className="h-3 w-3" /> {publishedListing ? publishedListing.location : 'Location added at publish'}
                     </p>
                     <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3">
-                      <span className="font-display text-xl font-bold text-accent-emerald-light">Price on request</span>
-                      <span className="flex items-center gap-1 text-xs font-semibold text-accent-emerald-light">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Ready to publish
-                      </span>
+                      <span className="font-display text-xl font-bold text-accent-emerald-light">{publishedListing?.price ?? 'Price on request'}</span>
+                      {publishedListing ? (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-accent-emerald-light">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Published
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setPublishModalOpen(true)}
+                          className="flex items-center gap-1 text-xs font-semibold text-accent-emerald-light hover:underline"
+                        >
+                          <Send className="h-3.5 w-3.5" /> Add details &amp; publish
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2108,6 +2293,19 @@ function StageForm() {
           </div>
         </div>
 
+        {publishModalOpen && (
+          <PublishDirectModal
+            file={selectedFile}
+            previewUrl={previewUrl}
+            defaultCategory={PRESET_MARKET_CATEGORY[presetId]}
+            onClose={() => setPublishModalOpen(false)}
+            onPublished={(listing) => {
+              setPublishedListing(listing)
+              onPublished?.(listing)
+            }}
+          />
+        )}
+
         {emailModalOpen && (
           <Modal title="Unlock Free Watermarked Preview" onClose={() => setEmailModalOpen(false)}>
             <div className="space-y-4 p-6 text-white">
@@ -2133,6 +2331,170 @@ function StageForm() {
         )}
       </div>
     </section>
+  )
+}
+
+function PublishDirectModal({
+  file,
+  previewUrl,
+  defaultCategory,
+  onClose,
+  onPublished,
+}: {
+  file: File | null
+  previewUrl: string | null
+  defaultCategory: MarketCategory
+  onClose: () => void
+  onPublished: (listing: Listing) => void
+}) {
+  const [title, setTitle] = useState('')
+  const [price, setPrice] = useState('')
+  const [country, setCountry] = useState<CountryCode>('US')
+  const [location, setLocation] = useState('')
+  const [category, setCategory] = useState<MarketCategory>(defaultCategory)
+  const [description, setDescription] = useState('')
+  const [sellerName, setSellerName] = useState('')
+  const [sellerPhone, setSellerPhone] = useState('')
+  const [status, setStatus] = useState<'idle' | 'publishing' | 'published'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const formId = useId()
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!supabase || status === 'publishing') return
+    setStatus('publishing')
+    setError(null)
+
+    const imageUrl = await uploadListingImage(file)
+    const row: NewListingRow = {
+      title: title.trim(),
+      location: location.trim() || null,
+      country,
+      market_category: category,
+      subcategory: MARKET_CATEGORIES.find((c) => c.value === category)?.label ?? null,
+      condition: 'Original photo',
+      price: price.trim() || null,
+      description: description.trim() || null,
+      image_url: imageUrl,
+      seller_name: sellerName.trim() || null,
+      seller_phone: sellerPhone.trim() || null,
+      latitude: null,
+      longitude: null,
+    }
+
+    const { data, error: insertError } = await supabase.from('listings').insert(row).select().single()
+    if (insertError) {
+      setStatus('idle')
+      setError(insertError.message)
+      return
+    }
+    setStatus('published')
+    onPublished(rowToListing(data as ListingRow))
+  }
+
+  const inputClass = 'w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2 text-sm text-white outline-none focus:border-accent-emerald/50'
+  const labelClass = 'mb-1 block text-xs font-medium text-slate-300'
+
+  return (
+    <Modal title="Publish Direct (No AI)" onClose={onClose} className="sm:max-w-lg">
+      {status === 'published' ? (
+        <div className="p-6 text-center">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-accent-emerald" />
+          <p className="mt-4 font-display text-xl font-semibold text-white">Listing Published</p>
+          <p className="mt-2 text-sm text-slate-400">Your listing is now live in the Marketplace Feed.</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-6 w-full rounded-xl bg-ink-700 py-3 font-semibold text-white transition hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4 p-6">
+          {previewUrl && (
+            <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-ink-700">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={previewUrl} alt="Listing photo" className="h-full w-full object-cover" />
+            </div>
+          )}
+
+          {!isSupabaseConfigured && (
+            <p className="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-200">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Publishing is unavailable: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to connect Supabase.
+            </p>
+          )}
+
+          <div>
+            <label htmlFor={`${formId}-title`} className={labelClass}>Title</label>
+            <input id={`${formId}-title`} required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 2-Bedroom Apartment in Marina" className={inputClass} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={`${formId}-price`} className={labelClass}>Price</label>
+              <input id={`${formId}-price`} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. $1,200" className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor={`${formId}-category`} className={labelClass}>Category</label>
+              <select id={`${formId}-category`} value={category} onChange={(e) => setCategory(e.target.value as MarketCategory)} className={inputClass}>
+                {MARKET_CATEGORIES.filter((c) => c.value !== 'all').map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={`${formId}-country`} className={labelClass}>Country</label>
+              <select id={`${formId}-country`} value={country} onChange={(e) => setCountry(e.target.value as CountryCode)} className={inputClass}>
+                {COUNTRY_GROUPS.map((g) => (
+                  <optgroup key={g.region} label={g.region}>
+                    {g.countries.map((c) => (
+                      <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${formId}-location`} className={labelClass}>City / Area</label>
+              <input id={`${formId}-location`} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Dubai Marina" className={inputClass} />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor={`${formId}-description`} className={labelClass}>Description</label>
+            <textarea id={`${formId}-description`} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={`${formId}-seller`} className={labelClass}>Your Name</label>
+              <input id={`${formId}-seller`} value={sellerName} onChange={(e) => setSellerName(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor={`${formId}-phone`} className={labelClass}>Phone (optional)</label>
+              <input id={`${formId}-phone`} type="tel" value={sellerPhone} onChange={(e) => setSellerPhone(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+
+          {error && (
+            <p role="alert" className="text-xs text-rose-300">Couldn&apos;t publish listing: {error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={!isSupabaseConfigured || status === 'publishing'}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-emerald to-accent-emerald-light py-3 font-semibold text-ink-900 transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {status === 'publishing' ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Send className="h-4 w-4" /> Publish Listing</>}
+          </button>
+        </form>
+      )}
+    </Modal>
   )
 }
 
@@ -2799,6 +3161,7 @@ export default function App() {
   // Shared by the Hero search bar and the marketplace search bar so both stay in sync.
   const [searchQuery, setSearchQuery] = useState('')
   const [searchCountry, setSearchCountry] = useState<CountryFilter>('all')
+  const [listingsVersion, setListingsVersion] = useState(0)
   const navigate = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
   // Close the Verified Seller checkout if the visitor returns from Stripe via the back button.
@@ -2832,8 +3195,9 @@ export default function App() {
           onQueryChange={setSearchQuery}
           country={searchCountry}
           onCountryChange={setSearchCountry}
+          refreshKey={listingsVersion}
         />
-        <StageForm />
+        <StageForm onPublished={() => setListingsVersion((v) => v + 1)} />
         <Pricing onNavigate={navigate} onGetVerified={() => setVerifiedSellerOpen(true)} />
       </main>
       {verifiedSellerOpen && (
