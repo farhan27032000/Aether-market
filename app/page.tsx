@@ -815,7 +815,12 @@ const PRICING_PLANS: PricingPlan[] = [
     price: '$5',
     period: '/ per listing',
     description: 'Perfect for owners and agents staging a single property or plot.',
-    features: ['1 Active Listing', 'Before & After Interactive Staging', 'HD Image Support'],
+    features: [
+      '1 Active Listing (Stays active for 3 Months)',
+      'Before & After Interactive Staging',
+      'AI photo modification for future furnished outlook',
+      'HD Image Support',
+    ],
     cta: 'Get Started',
   },
   {
@@ -823,7 +828,12 @@ const PRICING_PLANS: PricingPlan[] = [
     price: '$99',
     period: '/ month',
     description: 'Built for agencies and developers moving inventory at scale.',
-    features: ['Unlimited Property Listings', 'Featured Placement on Marketplace', 'Priority Rendering & Support'],
+    features: [
+      'Maximum 50 Verified Property Listings (Stay active up to 6 Months)',
+      'Official Aether Brand Page & X Advertising Promotion',
+      'Featured Placement on Marketplace',
+      'Priority Rendering & Support',
+    ],
     cta: 'Subscribe Now',
     popular: true,
   },
