@@ -3,7 +3,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BarChart2, Bath, Bed, Building2, Calendar, Check, CheckCircle2, CreditCard, Flame, Heart, ImagePlus, LayoutGrid, Loader2, Lock, Map as MapIcon, MapPin, Maximize, Menu, MessageCircle, MoveHorizontal, Radio, Repeat2, RotateCcw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Upload, Wand2, X, Zap, BadgeCheck, Briefcase, Car, Cpu, Factory, Tag } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // utils
@@ -17,32 +17,27 @@ function cn(...inputs: ClassValue[]) {
 // listings & types
 // ---------------------------------------------------------------------------
 
-type SpaceCategory =
-  | 'Living Room'
-  | 'Kitchen'
-  | 'Bedroom'
-  | 'Office'
-  | 'Dining Room'
-  | 'Commercial'
-  | 'Raw Land / Plot'
-  | 'Exterior & Lawn'
+type MarketCategory = 'real-estate' | 'vehicles' | 'electronics' | 'industrial' | 'services'
 
-type InteriorStyle =
-  | 'Modern'
-  | 'Scandinavian'
-  | 'Japandi'
-  | 'Industrial'
-  | 'Mid-Century'
-  | 'Coastal'
+const MARKET_CATEGORIES: { value: MarketCategory | 'all'; label: string }[] = [
+  { value: 'all', label: 'All Items' },
+  { value: 'real-estate', label: 'Real Estate' },
+  { value: 'vehicles', label: 'Vehicles & Motors' },
+  { value: 'electronics', label: 'Electronics & Tech' },
+  { value: 'industrial', label: 'Industrial & Factory' },
+  { value: 'services', label: 'Services & Business Ads' },
+]
 
-type ArchitecturalStyle =
-  | 'Modern Luxury Villa'
-  | 'Suburban Family Home'
-  | 'Commercial Plaza'
-  | 'Eco-Glass Cabin'
-  | 'High-Rise Residential'
+type MarketFilter = (typeof MARKET_CATEGORIES)[number]['value']
 
-type StagingStyle = InteriorStyle | ArchitecturalStyle
+const MARKET_CATEGORY_ICONS: Record<MarketFilter, typeof Building2> = {
+  all: LayoutGrid,
+  'real-estate': Building2,
+  vehicles: Car,
+  electronics: Cpu,
+  industrial: Factory,
+  services: Briefcase,
+}
 
 interface Seller {
   name: string
@@ -56,15 +51,21 @@ interface Listing {
   id: string
   title: string
   location: string
-  category: SpaceCategory
-  style: StagingStyle
+  marketCategory: MarketCategory
+  /** Short type label shown on the card, e.g. "Raw Land / Plot" or "Luxury Sedan". */
+  subcategory: string
+  condition: string
   price: string
-  rating: number
-  beds?: number
-  baths?: number
-  sqft?: number
-  beforeImage: string
-  afterImage: string
+  /** Optional price suffix, e.g. "/ hr" for service ads. */
+  priceNote?: string
+  /** Up to three headline specs shown as chips on the card. */
+  specs: string[]
+  /** Main photo (the AI-enhanced version when `rawImage` is set). */
+  image: string
+  /** Original photo. When set, cards show a before/after slider. */
+  rawImage?: string
+  /** Label for the enhanced side of the slider. */
+  enhancedLabel?: string
   description: string
   features: string[]
   seller: Seller
@@ -75,57 +76,19 @@ interface Listing {
   coordinates: { lat: number; lng: number }
 }
 
-const INTERIOR_STYLES: InteriorStyle[] = [
-  'Modern',
-  'Scandinavian',
-  'Japandi',
-  'Industrial',
-  'Mid-Century',
-  'Coastal',
-]
-
-const ARCHITECTURAL_STYLES: ArchitecturalStyle[] = [
-  'Modern Luxury Villa',
-  'Suburban Family Home',
-  'Commercial Plaza',
-  'Eco-Glass Cabin',
-  'High-Rise Residential',
-]
-
-const CATEGORIES: { value: SpaceCategory; label: string; isLand?: boolean }[] = [
-  { value: 'Living Room', label: 'Living Room' },
-  { value: 'Kitchen', label: 'Kitchen' },
-  { value: 'Bedroom', label: 'Bedroom' },
-  { value: 'Office', label: 'Home Office' },
-  { value: 'Dining Room', label: 'Dining Room' },
-  { value: 'Commercial', label: 'Commercial' },
-  { value: 'Raw Land / Plot', label: 'Raw Land / Plot', isLand: true },
-  { value: 'Exterior & Lawn', label: 'Exterior & Lawn', isLand: true },
-]
-
-const SAMPLE_RENDERS: Record<SpaceCategory, string> = {
-  'Living Room': 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=80',
-  Kitchen: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=80',
-  Bedroom: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80',
-  Office: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80',
-  'Dining Room': 'https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=1600&q=80',
-  Commercial: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80',
-  'Raw Land / Plot': 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80',
-  'Exterior & Lawn': 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1600&q=80',
-}
-
 const LISTINGS: Listing[] = [
   {
     id: 'austin-land-plot',
     title: 'Austin Hillside Development Plot',
     location: 'Austin, TX',
-    category: 'Raw Land / Plot',
-    style: 'Modern Luxury Villa',
+    marketCategory: 'real-estate',
+    subcategory: 'Raw Land / Plot',
+    condition: 'Shovel-ready',
     price: '$450,000',
-    rating: 5.0,
-    sqft: 18500,
-    beforeImage: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1600&q=80',
-    afterImage: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80',
+    specs: ['0.42 acres', 'Zoned R-1', '18,500 sqft'],
+    rawImage: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1600&q=80',
+    image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80',
+    enhancedLabel: 'AI Render',
     description:
       '0.42 acres of pristine sloping land with panoramic hill country views. Zoned R-1 with utility hookups available at curb. Rendered vision shows potential 4,200 sqft modern cantilevered villa.',
     features: ['0.42 Acres', 'Hill country views', 'Utilities at street', 'Architectural plans optional'],
@@ -135,18 +98,89 @@ const LISTINGS: Listing[] = [
     coordinates: { lat: 30.34, lng: -97.86 },
   },
   {
+    id: 'commercial-warehouse',
+    title: 'Commercial Distribution Warehouse',
+    location: 'Dallas, TX',
+    marketCategory: 'real-estate',
+    subcategory: 'Commercial Warehouse',
+    condition: 'Move-in ready',
+    price: '$2,850,000',
+    specs: ['42,000 sqft', '32 ft clear height', '8 dock doors'],
+    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Class A distribution facility minutes from I-35E with heavy racking already installed, ESFR sprinklers, and a fenced truck court. Ideal for e-commerce fulfilment or 3PL operations.',
+    features: ['ESFR sprinklers', 'Heavy racking included', 'Fenced truck court', '3-phase power'],
+    seller: { name: 'Marcus Lee', agency: 'Metroplex Commercial Group', initials: 'ML', responseTime: '~20 min', isVerifiedAgent: true },
+    listedDaysAgo: 4,
+    isVerifiedListing: true,
+    coordinates: { lat: 32.78, lng: -96.8 },
+  },
+  {
+    id: 'luxury-sedan',
+    title: '2022 BMW M5 Competition',
+    location: 'Miami, FL',
+    marketCategory: 'vehicles',
+    subcategory: 'Luxury Sedan',
+    condition: 'Used – Excellent',
+    price: '$89,900',
+    specs: ['12,400 mi', '617 hp V8', 'Automatic'],
+    image: 'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'One-owner M5 Competition in Brands Hatch Grey with full dealer service history, clean title, and remaining factory warranty. Carbon ceramic brakes and Executive Package.',
+    features: ['Clean title', 'Dealer serviced', 'Carbon ceramic brakes', 'Factory warranty'],
+    seller: { name: 'Daniel Ortiz', agency: 'Coastal Prestige Motors', initials: 'DO', responseTime: '~15 min', isVerifiedAgent: true },
+    listedDaysAgo: 1,
+    isVerifiedListing: true,
+    coordinates: { lat: 25.76, lng: -80.19 },
+  },
+  {
+    id: 'industrial-generator',
+    title: '500 kW Industrial Diesel Generator',
+    location: 'Houston, TX',
+    marketCategory: 'industrial',
+    subcategory: 'Power Generation',
+    condition: 'Refurbished',
+    price: '$64,500',
+    specs: ['500 kW / 625 kVA', '1,820 run hrs', '480V 3-phase'],
+    image: 'https://images.unsplash.com/photo-1513828583688-c52646db42da?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Fully load-bank tested standby generator with sound-attenuated enclosure and automatic transfer switch. Ideal backup power for factories, data centres, and hospitals.',
+    features: ['Load-bank tested', 'Sound-attenuated enclosure', 'ATS included', 'Freight available'],
+    seller: { name: 'Priya Nair', agency: 'Gulf Industrial Supply', initials: 'PN', responseTime: '~1 hr', isVerifiedAgent: true },
+    listedDaysAgo: 6,
+    isVerifiedListing: true,
+    coordinates: { lat: 29.76, lng: -95.37 },
+  },
+  {
+    id: 'mac-studio',
+    title: 'Apple Mac Studio (M2 Ultra)',
+    location: 'San Francisco, CA',
+    marketCategory: 'electronics',
+    subcategory: 'Desktop Computer',
+    condition: 'Like New',
+    price: '$3,299',
+    specs: ['M2 Ultra 24-core', '64GB RAM', '2TB SSD'],
+    image: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=1600&q=80',
+    description:
+      'Barely used Mac Studio from a design studio upgrade. Original box, AppleCare+ until 2027, battery-free desktop with zero cosmetic wear. Local pickup or insured shipping.',
+    features: ['AppleCare+ until 2027', 'Original packaging', 'Zero cosmetic wear', 'Insured shipping'],
+    seller: { name: 'Alex Kim', agency: 'Bay Area Tech Resale', initials: 'AK', responseTime: '~5 min', isVerifiedAgent: true },
+    listedDaysAgo: 3,
+    isVerifiedListing: true,
+    coordinates: { lat: 37.77, lng: -122.42 },
+  },
+  {
     id: 'skyline-loft',
     title: 'Skyline Loft',
     location: 'Austin, TX',
-    category: 'Living Room',
-    style: 'Modern',
+    marketCategory: 'real-estate',
+    subcategory: 'Apartment · Living Room',
+    condition: 'Renovated',
     price: '$685,000',
-    rating: 4.9,
-    beds: 2,
-    baths: 2,
-    sqft: 1240,
-    beforeImage: 'https://images.unsplash.com/photo-1560185007-cde436f6a4d0?auto=format&fit=crop&w=1600&q=80',
-    afterImage: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=80',
+    specs: ['2 bd · 2 ba', '1,240 sqft', '14 ft ceilings'],
+    rawImage: 'https://images.unsplash.com/photo-1560185007-cde436f6a4d0?auto=format&fit=crop&w=1600&q=80',
+    image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=80',
+    enhancedLabel: 'AI Staged',
     description:
       'A sun-filled downtown loft with 14-foot ceilings, polished concrete floors, and unobstructed skyline views. Walking distance to Lady Bird Lake and the Rainey Street district.',
     features: ['14 ft ceilings', 'Skyline views', 'Rooftop pool access', 'Secured parking'],
@@ -159,15 +193,14 @@ const LISTINGS: Listing[] = [
     id: 'harbor-kitchen',
     title: 'Harbor View Residence',
     location: 'Seattle, WA',
-    category: 'Kitchen',
-    style: 'Scandinavian',
+    marketCategory: 'real-estate',
+    subcategory: 'House · Kitchen',
+    condition: 'Renovated',
     price: '$1,120,000',
-    rating: 4.8,
-    beds: 3,
-    baths: 2.5,
-    sqft: 2100,
-    beforeImage: 'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1600&q=80',
-    afterImage: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=80',
+    specs: ['3 bd · 2.5 ba', '2,100 sqft', 'Bay views'],
+    rawImage: 'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1600&q=80',
+    image: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=80',
+    enhancedLabel: 'AI Staged',
     description:
       'Renovated chef’s kitchen with a quartz island overlooking Elliott Bay. Bright, open-plan living with radiant floor heating throughout the main level.',
     features: ['Quartz island', 'Bay views', 'Radiant heating', 'EV charger'],
@@ -177,25 +210,22 @@ const LISTINGS: Listing[] = [
     coordinates: { lat: 47.61, lng: -122.35 },
   },
   {
-    id: 'desert-suite',
-    title: 'Desert Retreat',
-    location: 'Scottsdale, AZ',
-    category: 'Bedroom',
-    style: 'Japandi',
-    price: '$540,000',
-    rating: 4.7,
-    beds: 2,
-    baths: 2,
-    sqft: 1480,
-    beforeImage: 'https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1600&q=80',
-    afterImage: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80',
+    id: 'product-photography',
+    title: 'Pro Product & Property Photography',
+    location: 'Phoenix, AZ',
+    marketCategory: 'services',
+    subcategory: 'Business Service',
+    condition: 'Available this week',
+    price: '$120',
+    priceNote: '/ hr',
+    specs: ['Same-day edits', 'Drone add-on', 'Studio or on-site'],
+    image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1600&q=80',
     description:
-      'A calm, light-washed retreat with hand-troweled plaster walls and framed views of the McDowell Mountains. Private courtyard and low-maintenance desert landscaping.',
-    features: ['Mountain views', 'Private courtyard', 'Smart home', 'Solar panels'],
-    seller: { name: 'Elena Ruiz', agency: 'Sonoran Living Group', initials: 'ER', responseTime: '~30 min', isVerifiedAgent: true },
-    listedDaysAgo: 12,
-    isVerifiedListing: true,
-    coordinates: { lat: 33.49, lng: -111.93 },
+      'Commercial photographer for listings, dealerships, and online stores. Packages include lighting setup, retouching, and AI-ready raw files for the Aether Enhancer Studio.',
+    features: ['Licensed drone pilot', 'Retouching included', 'Commercial usage rights', '48-hour delivery'],
+    seller: { name: 'Elena Ruiz', agency: 'Sonoran Visual Co.', initials: 'ER', responseTime: '~30 min', isVerifiedAgent: true },
+    listedDaysAgo: 5,
+    coordinates: { lat: 33.45, lng: -112.07 },
   },
 ]
 
@@ -293,7 +323,7 @@ function SellerVerificationModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Verify Broker & Agency Account" onClose={onClose} className="sm:max-w-md">
+    <Modal title="Verify Seller & Business Account" onClose={onClose} className="sm:max-w-md">
       {status === 'submitted' ? (
         <div className="p-6 text-center">
           <CheckCircle2 className="mx-auto h-12 w-12 text-accent-emerald" />
@@ -312,7 +342,7 @@ function SellerVerificationModal({ onClose }: { onClose: () => void }) {
       ) : (
         <div className="space-y-6 p-6">
           <div className="rounded-xl border border-accent-indigo/30 bg-accent-indigo/10 p-4 text-xs text-accent-indigo-light">
-            Verified brokers receive top marketplace priority, trusted badge placement, and unrestricted buyer leads.
+            Verified sellers, dealers and brokers receive top marketplace priority, trusted badge placement, and unrestricted buyer leads.
           </div>
 
           <button
@@ -340,6 +370,7 @@ function SellerVerificationModal({ onClose }: { onClose: () => void }) {
               >
                 <option value="trade_license">Company Trade License / Incorporation</option>
                 <option value="rehab_license">Real Estate Brokerage License</option>
+                <option value="dealer_license">Vehicle Dealer / Reseller License</option>
                 <option value="tax_tin">Corporate e-TIN / Tax Registration</option>
               </select>
             </div>
@@ -478,7 +509,7 @@ function BeforeAfterSlider({
           className="absolute bottom-3 right-3 z-20 rounded bg-ink-900/60 px-2 py-1 text-[10px] font-mono tracking-wider text-white/70 backdrop-blur-sm pointer-events-none"
           style={{ opacity: position > 85 ? 0 : 1 }}
         >
-          VIRTUALLY STAGED · AETHER MARKET
+          AI ENHANCED · AETHER MARKET
         </span>
       )}
 
@@ -608,6 +639,39 @@ function VerifiedListingBadge({ className }: { className?: string }) {
   )
 }
 
+function VerifiedSellerBadge() {
+  return (
+    <span
+      title="Identity and business documents verified"
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-indigo/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-indigo-light"
+    >
+      <BadgeCheck className="h-3 w-3" /> Verified Seller
+    </span>
+  )
+}
+
+/** Before/after slider for AI-enhanced listings, otherwise the single listing photo. */
+function ListingMedia({ listing, className }: { listing: Listing; className?: string }) {
+  if (listing.rawImage) {
+    return (
+      <BeforeAfterSlider
+        beforeImage={listing.rawImage}
+        afterImage={listing.image}
+        beforeLabel="Original"
+        afterLabel={listing.enhancedLabel ?? 'AI Enhanced'}
+        alt={listing.title}
+        className={className}
+      />
+    )
+  }
+  return (
+    <div className={cn('relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-ink-700', className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={listing.image} alt={listing.title} className="h-full w-full object-cover" loading="lazy" />
+    </div>
+  )
+}
+
 function InquiryModal({ listing, onClose }: { listing: Listing; onClose: () => void }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -621,18 +685,20 @@ function InquiryModal({ listing, onClose }: { listing: Listing; onClose: () => v
       `Hi ${listing.seller.name.split(' ')[0]}, I'm interested in "${listing.title}" (${listing.price}, ${listing.location}) on Aether Market.`,
       `Name: ${name.trim()}`,
       `Email: ${email.trim()}`,
-      'Could you share more details or arrange a viewing?',
+      listing.marketCategory === 'real-estate'
+        ? 'Could you share more details or arrange a viewing?'
+        : 'Is it still available? I would love more details.',
     ].join('\n')
     window.open(buildWhatsAppUrl(message), '_blank', 'noopener,noreferrer')
     setSent(true)
   }
 
   return (
-    <Modal title="Inquire About This Property" onClose={onClose} className="sm:max-w-md">
+    <Modal title={listing.marketCategory === 'real-estate' ? 'Inquire About This Property' : 'Inquire About This Item'} onClose={onClose} className="sm:max-w-md">
       <div className="space-y-5 p-6">
         <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-700/60 p-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={listing.afterImage} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+          <img src={listing.image} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">{listing.title}</p>
             <p className="truncate text-xs text-slate-400">
@@ -723,16 +789,26 @@ function PropertyDetailModal({ listing, onClose }: { listing: Listing; onClose: 
   return (
     <Modal title={listing.title} onClose={onClose} className="sm:max-w-4xl">
       <div className="grid gap-6 p-6 lg:grid-cols-2">
-        <BeforeAfterSlider beforeImage={listing.beforeImage} afterImage={listing.afterImage} alt={listing.title} />
+        <ListingMedia listing={listing} />
         <div className="flex flex-col">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-accent-indigo/10 px-3 py-0.5 text-xs text-accent-indigo-light">{listing.category}</span>
-            <span className="rounded-full bg-white/5 px-3 py-0.5 text-xs text-slate-300">{listing.style}</span>
+            <span className="rounded-full bg-accent-indigo/10 px-3 py-0.5 text-xs text-accent-indigo-light">{listing.subcategory}</span>
+            <span className="rounded-full bg-white/5 px-3 py-0.5 text-xs text-slate-300">{listing.condition}</span>
             {listing.isVerifiedListing && <VerifiedListingBadge />}
           </div>
-          <p className="mt-4 font-display text-3xl font-bold text-accent-emerald-light">{listing.price}</p>
+          <p className="mt-4 font-display text-3xl font-bold text-accent-emerald-light">
+            {listing.price}
+            {listing.priceNote && <span className="ml-1 text-base font-medium text-slate-400">{listing.priceNote}</span>}
+          </p>
           <p className="mt-1 text-sm text-slate-400"><MapPin className="inline h-4 w-4" /> {listing.location}</p>
           <p className="mt-4 text-sm text-slate-300">{listing.description}</p>
+          <ul className="mt-4 grid grid-cols-2 gap-2">
+            {[...listing.specs, ...listing.features].map((f) => (
+              <li key={f} className="flex items-start gap-1.5 text-xs text-slate-300">
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-emerald-light" /> {f}
+              </li>
+            ))}
+          </ul>
 
           <div className="mt-6 flex items-center gap-3 rounded-xl border border-white/5 bg-ink-700/60 p-4">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-indigo font-bold text-white">
@@ -754,7 +830,7 @@ function PropertyDetailModal({ listing, onClose }: { listing: Listing; onClose: 
               aria-haspopup="dialog"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-indigo py-3.5 font-semibold text-white transition hover:bg-accent-indigo-light hover:text-ink-900"
             >
-              <Send className="h-5 w-5" /> Contact Agent
+              <Send className="h-5 w-5" /> {listing.marketCategory === 'real-estate' ? 'Contact Agent' : 'Contact Seller'}
             </button>
             <button
               type="button"
@@ -789,10 +865,10 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
             onClick={onOpenVerify}
             className="flex items-center gap-1 rounded-lg border border-accent-indigo/30 bg-accent-indigo/10 px-3 py-1.5 text-xs font-semibold text-accent-indigo-light transition hover:bg-accent-indigo/20"
           >
-            <ShieldCheck className="h-4 w-4" /> Verify Agency
+            <ShieldCheck className="h-4 w-4" /> Verify Seller
           </button>
           <button onClick={() => onNavigate('staging-studio')} className="rounded-lg bg-accent-indigo px-4 py-2 text-sm font-semibold text-white">
-            List a Property
+            Post an Ad
           </button>
         </div>
       </nav>
@@ -800,27 +876,42 @@ function Navbar({ onNavigate, onOpenVerify }: { onNavigate: (id: string) => void
   )
 }
 
-function Hero({ onNavigate }: { onNavigate: (id: string) => void }) {
+function Hero({ onNavigate, onBrowseCategory }: { onNavigate: (id: string) => void; onBrowseCategory: (c: MarketFilter) => void }) {
   return (
     <section className="relative overflow-hidden py-24">
       <div className="mx-auto max-w-7xl px-6 text-center">
         <span className="inline-flex items-center gap-2 rounded-full border border-accent-indigo/30 bg-accent-indigo/10 px-3 py-1 text-xs font-semibold text-accent-indigo-light">
-          <Sparkles className="h-3.5 w-3.5" /> AI Virtual Staging & Raw Land Renders
+          <Sparkles className="h-3.5 w-3.5" /> Multi-category classifieds with AI photo enhancement
         </span>
         <h1 className="mt-6 font-display text-4xl font-bold text-white sm:text-6xl">
-          Empty land & rooms in. <span className="text-accent-emerald-light">Sold properties</span> out.
+          Aether Market — <span className="text-accent-emerald-light">Buy, Sell & Stage Anything</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-xl text-lg text-slate-400">
-          Transform empty room photos or raw land plots into stunning architectural masterworks instantly.
+        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
+          The modern marketplace for real estate, vehicles, industrial machinery, electronics, and commercial inventory.
         </p>
         <div className="mt-8 flex justify-center gap-4">
           <button onClick={() => onNavigate('staging-studio')} className="rounded-xl bg-accent-indigo px-6 py-3.5 font-semibold text-white">
-            Stage a Property or Land
+            Sell & Enhance an Item
           </button>
           <button onClick={() => onNavigate('marketplace')} className="rounded-xl border border-white/10 px-6 py-3.5 font-semibold text-white">
             Browse Marketplace
           </button>
         </div>
+        <nav aria-label="Browse by category" className="mx-auto mt-10 flex max-w-4xl flex-wrap justify-center gap-2">
+          {MARKET_CATEGORIES.filter((c) => c.value !== 'all').map((c) => {
+            const Icon = MARKET_CATEGORY_ICONS[c.value]
+            return (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => onBrowseCategory(c.value)}
+                className="flex items-center gap-2 rounded-full border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-slate-300 transition hover:border-accent-indigo/40 hover:text-white"
+              >
+                <Icon className="h-4 w-4 text-accent-indigo-light" /> {c.label}
+              </button>
+            )
+          })}
+        </nav>
       </div>
     </section>
   )
@@ -874,18 +965,56 @@ function ViewToggle({ view, onChange }: { view: MarketplaceView; onChange: (v: M
 }
 
 function ListingCard({ listing, onView, onInquire }: { listing: Listing; onView: () => void; onInquire: () => void }) {
+  const CategoryIcon = MARKET_CATEGORY_ICONS[listing.marketCategory]
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-800/60 p-4 transition hover:border-white/10">
-      <BeforeAfterSlider beforeImage={listing.beforeImage} afterImage={listing.afterImage} alt={listing.title} />
-      <div className="mt-4">
-        {listing.isVerifiedListing && <VerifiedListingBadge className="mb-2" />}
+    <article className="flex flex-col rounded-2xl border border-white/5 bg-ink-800/60 p-4 transition hover:border-white/10">
+      <ListingMedia listing={listing} />
+      <div className="mt-4 flex flex-1 flex-col">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-semibold text-white">{listing.title}</h3>
-          {listing.seller.isVerifiedAgent && <BadgeCheck className="h-4 w-4 shrink-0 text-accent-emerald" aria-label="Verified Broker" />}
+          <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <CategoryIcon className="h-3.5 w-3.5 shrink-0" /> {listing.subcategory}
+          </span>
+          {listing.isVerifiedListing && <VerifiedListingBadge />}
         </div>
-        <p className="text-xs text-slate-400">{listing.location}</p>
-        <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/5 pt-3">
-          <span className="font-display text-xl font-bold text-accent-emerald-light">{listing.price}</span>
+        <h3 className="mt-2 font-semibold text-white">{listing.title}</h3>
+
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {listing.specs.map((spec) => (
+            <li key={spec} className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] text-slate-300">{spec}</li>
+          ))}
+        </ul>
+
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-lg bg-ink-900/50 px-2.5 py-2">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-500">Condition</dt>
+            <dd className="mt-0.5 flex items-center gap-1 font-medium text-slate-200">
+              <Tag className="h-3 w-3 shrink-0 text-accent-indigo-light" /> {listing.condition}
+            </dd>
+          </div>
+          <div className="rounded-lg bg-ink-900/50 px-2.5 py-2">
+            <dt className="text-[10px] uppercase tracking-wider text-slate-500">Location</dt>
+            <dd className="mt-0.5 flex items-center gap-1 truncate font-medium text-slate-200">
+              <MapPin className="h-3 w-3 shrink-0 text-accent-indigo-light" /> {listing.location}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="mt-3 flex items-center gap-2">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent-indigo to-accent-emerald text-[10px] font-bold text-white">
+            {listing.seller.initials}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
+            <span className="font-medium text-slate-200">{listing.seller.name}</span> · {listing.seller.agency}
+          </span>
+          {listing.seller.isVerifiedAgent && <VerifiedSellerBadge />}
+        </div>
+
+        <div className="mt-auto pt-4">
+        <div className="flex items-center justify-between gap-2 border-t border-white/5 pt-3">
+          <span className="font-display text-xl font-bold text-accent-emerald-light">
+            {listing.price}
+            {listing.priceNote && <span className="ml-0.5 text-xs font-medium text-slate-400">{listing.priceNote}</span>}
+          </span>
           <div className="flex items-center gap-3">
             <button type="button" onClick={onView} className="text-xs font-semibold text-slate-300 transition hover:text-white">
               Details
@@ -900,14 +1029,24 @@ function ListingCard({ listing, onView, onInquire }: { listing: Listing; onView:
             </button>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </article>
   )
 }
 
-function MapPreview({ onView, onInquire }: { onView: (l: Listing) => void; onInquire: (l: Listing) => void }) {
-  const [activeId, setActiveId] = useState<string>(LISTINGS[0].id)
-  const active = LISTINGS.find((l) => l.id === activeId) ?? LISTINGS[0]
+function MapPreview({
+  listings,
+  onView,
+  onInquire,
+}: {
+  listings: Listing[]
+  onView: (l: Listing) => void
+  onInquire: (l: Listing) => void
+}) {
+  const [activeId, setActiveId] = useState<string>(listings[0]?.id ?? '')
+  const active = listings.find((l) => l.id === activeId) ?? listings[0]
+  if (!active) return null
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -941,10 +1080,10 @@ function MapPreview({ onView, onInquire }: { onView: (l: Listing) => void; onInq
         </svg>
 
         <span className="absolute left-3 top-3 z-20 rounded-full bg-ink-900/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-300 backdrop-blur">
-          Map Preview · {LISTINGS.length} listings
+          Map Preview · {listings.length} listings
         </span>
 
-        {LISTINGS.map((l) => {
+        {listings.map((l) => {
           const { x, y } = projectToMap(l.coordinates)
           const isActive = l.id === activeId
           return (
@@ -979,7 +1118,7 @@ function MapPreview({ onView, onInquire }: { onView: (l: Listing) => void; onInq
       <div className="flex flex-col rounded-2xl border border-white/5 bg-ink-800/60 p-4">
         <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-ink-700">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={active.afterImage} alt={active.title} className="h-full w-full object-cover" />
+          <img src={active.image} alt={active.title} className="h-full w-full object-cover" />
           {active.isVerifiedListing && (
             <VerifiedListingBadge className="absolute left-3 top-3 bg-ink-900/80 backdrop-blur" />
           )}
@@ -988,7 +1127,11 @@ function MapPreview({ onView, onInquire }: { onView: (l: Listing) => void; onInq
         <p className="flex items-center gap-1 text-xs text-slate-400">
           <MapPin className="h-3 w-3" /> {active.location}
         </p>
-        <p className="mt-2 font-display text-xl font-bold text-accent-emerald-light">{active.price}</p>
+        <p className="mt-2 font-display text-xl font-bold text-accent-emerald-light">
+          {active.price}
+          {active.priceNote && <span className="ml-0.5 text-xs font-medium text-slate-400">{active.priceNote}</span>}
+        </p>
+        <p className="mt-1 text-xs text-slate-400">{active.subcategory} · {active.condition}</p>
         <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
           <button
             type="button"
@@ -1011,30 +1154,84 @@ function MapPreview({ onView, onInquire }: { onView: (l: Listing) => void; onInq
   )
 }
 
-function Marketplace() {
+function CategoryFilterBar({ value, onChange }: { value: MarketFilter; onChange: (v: MarketFilter) => void }) {
+  return (
+    <div role="tablist" aria-label="Marketplace categories" className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none]">
+      {MARKET_CATEGORIES.map((c) => {
+        const Icon = MARKET_CATEGORY_ICONS[c.value]
+        const count = c.value === 'all' ? LISTINGS.length : LISTINGS.filter((l) => l.marketCategory === c.value).length
+        const selected = value === c.value
+        return (
+          <button
+            key={c.value}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(c.value)}
+            className={cn(
+              'flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition',
+              selected
+                ? 'border-accent-indigo bg-accent-indigo text-white shadow-lg shadow-accent-indigo/25'
+                : 'border-white/10 bg-ink-800/60 text-slate-300 hover:border-white/20 hover:text-white',
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {c.label}
+            <span className={cn('rounded-full px-1.5 text-[11px]', selected ? 'bg-white/20' : 'bg-white/5 text-slate-400')}>{count}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Marketplace({ filter, onFilterChange }: { filter: MarketFilter; onFilterChange: (v: MarketFilter) => void }) {
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
   const [inquiryListing, setInquiryListing] = useState<Listing | null>(null)
   const [view, setView] = useState<MarketplaceView>('grid')
 
+  const visible = useMemo(
+    () => (filter === 'all' ? LISTINGS : LISTINGS.filter((l) => l.marketCategory === filter)),
+    [filter],
+  )
+  const filterLabel = MARKET_CATEGORIES.find((c) => c.value === filter)?.label ?? 'All Items'
+
   return (
-    <section id="marketplace" className="bg-ink-900 py-24">
+    <section id="marketplace" className="scroll-mt-16 bg-ink-900 py-24">
       <div className="mx-auto max-w-7xl px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-display text-3xl font-bold text-white">Interactive Listing Marketplace</h2>
-            <p className="mt-1 text-sm text-slate-400">Drag any photo to compare the empty space with its AI-staged version.</p>
+            <h2 className="font-display text-3xl font-bold text-white">Marketplace Feed</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Property, vehicles, machinery, tech and services from verified sellers. Drag any before/after photo to compare.
+            </p>
           </div>
           <ViewToggle view={view} onChange={setView} />
         </div>
-        <div className="mt-8">
-          {view === 'grid' ? (
+
+        <div className="sticky top-16 z-30 -mx-6 mt-6 border-b border-white/5 bg-ink-900/85 px-6 py-3 backdrop-blur-xl">
+          <CategoryFilterBar value={filter} onChange={onFilterChange} />
+        </div>
+
+        <p className="mt-4 text-xs text-slate-500" aria-live="polite">
+          Showing {visible.length} {visible.length === 1 ? 'item' : 'items'} in {filterLabel}
+        </p>
+
+        <div className="mt-4">
+          {visible.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center">
+              <p className="font-semibold text-white">No items in {filterLabel} yet</p>
+              <p className="mt-1 text-sm text-slate-400">Be the first to post here.</p>
+            </div>
+          ) : view === 'grid' ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {LISTINGS.map((l) => (
+              {visible.map((l) => (
                 <ListingCard key={l.id} listing={l} onView={() => setSelectedListing(l)} onInquire={() => setInquiryListing(l)} />
               ))}
             </div>
           ) : (
-            <MapPreview onView={setSelectedListing} onInquire={setInquiryListing} />
+            // Remount on filter change so the selected pin resets to a visible listing.
+            <MapPreview key={filter} listings={visible} onView={setSelectedListing} onInquire={setInquiryListing} />
           )}
         </div>
       </div>
@@ -1046,9 +1243,62 @@ function Marketplace() {
 
 type StudioMode = 'awaiting-choice' | 'generating' | 'staged' | 'direct'
 
+type EnhancerPresetId = 'interior-staging' | 'ecommerce-backdrop' | 'vehicle-lighting' | 'showroom-display'
+
+interface EnhancerPreset {
+  id: EnhancerPresetId
+  label: string
+  /** What the user is uploading, used in prompts and the direct-publish preview. */
+  subject: string
+  variantLabel: string
+  variants: string[]
+  resultLabel: string
+  /** Sample "after" image used by the simulated AI result. */
+  sampleRender: string
+}
+
+const ENHANCER_PRESETS: EnhancerPreset[] = [
+  {
+    id: 'interior-staging',
+    label: 'Interior Room Staging',
+    subject: 'Room',
+    variantLabel: 'Interior Style',
+    variants: ['Modern', 'Scandinavian', 'Japandi', 'Industrial', 'Mid-Century', 'Coastal'],
+    resultLabel: 'AI Staged',
+    sampleRender: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=80',
+  },
+  {
+    id: 'ecommerce-backdrop',
+    label: 'E-Commerce Studio Backdrop',
+    subject: 'Product',
+    variantLabel: 'Backdrop',
+    variants: ['Seamless White', 'Bold Colour Pop', 'Soft Gradient', 'Marble Tabletop', 'Lifestyle Scene'],
+    resultLabel: 'Studio Backdrop',
+    sampleRender: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1600&q=80',
+  },
+  {
+    id: 'vehicle-lighting',
+    label: 'Vehicle Studio Lighting',
+    subject: 'Vehicle',
+    variantLabel: 'Lighting Setup',
+    variants: ['Showroom Spotlight', 'Clean White Cyclorama', 'Golden Hour Outdoor', 'Neon Night'],
+    resultLabel: 'Studio Lit',
+    sampleRender: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=1600&q=80',
+  },
+  {
+    id: 'showroom-display',
+    label: 'Showroom Display',
+    subject: 'Item',
+    variantLabel: 'Display Setting',
+    variants: ['Retail Showroom', 'Trade Show Booth', 'Factory Floor', 'Gallery Pedestal'],
+    resultLabel: 'Showroom',
+    sampleRender: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80',
+  },
+]
+
 function StageForm() {
-  const [category, setCategory] = useState<SpaceCategory>('Living Room')
-  const [style, setStyle] = useState<StagingStyle>('Modern')
+  const [presetId, setPresetId] = useState<EnhancerPresetId>('interior-staging')
+  const [style, setStyle] = useState<string>(ENHANCER_PRESETS[0].variants[0])
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -1060,8 +1310,9 @@ function StageForm() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const fileInputId = useId()
 
-  const isLand = category === 'Raw Land / Plot' || category === 'Exterior & Lawn'
-  const categoryLabel = CATEGORIES.find((c) => c.value === category)?.label ?? category
+  const preset = ENHANCER_PRESETS.find((p) => p.id === presetId) ?? ENHANCER_PRESETS[0]
+  const presetSelectId = useId()
+  const variantSelectId = useId()
   const showUploadBox = !previewUrl || mode === 'awaiting-choice' || mode === 'generating'
 
   // Release the object URL when it is replaced or the component unmounts.
@@ -1079,7 +1330,7 @@ function StageForm() {
     return () => window.clearTimeout(timer)
   }, [mode, generationRun])
 
-  const stagedPreviewUrl = SAMPLE_RENDERS[category]
+  const stagedPreviewUrl = preset.sampleRender
 
   const selectFile = (file: File | undefined) => {
     if (!file || !file.type.startsWith('image/')) return
@@ -1118,13 +1369,14 @@ function StageForm() {
     if (mode === 'staged' || mode === 'generating') generateAiPreview()
   }
 
-  const handleCategoryChange = (cat: SpaceCategory) => {
-    setCategory(cat)
-    setStyle(cat === 'Raw Land / Plot' || cat === 'Exterior & Lawn' ? 'Modern Luxury Villa' : 'Modern')
+  const handlePresetChange = (id: EnhancerPresetId) => {
+    const next = ENHANCER_PRESETS.find((p) => p.id === id) ?? ENHANCER_PRESETS[0]
+    setPresetId(next.id)
+    setStyle(next.variants[0])
     restageIfNeeded()
   }
 
-  const handleStyleChange = (next: StagingStyle) => {
+  const handleStyleChange = (next: string) => {
     setStyle(next)
     restageIfNeeded()
   }
@@ -1135,9 +1387,9 @@ function StageForm() {
   return (
     <section id="staging-studio" className="scroll-mt-16 border-y border-white/5 bg-ink-800/40 py-24">
       <div className="mx-auto max-w-4xl px-6 rounded-2xl border border-white/5 bg-ink-800/80 p-8">
-        <h2 className="font-display text-2xl font-bold text-white">AI Staging & Architectural Studio</h2>
+        <h2 className="font-display text-2xl font-bold text-white">AI Product & Space Enhancer Studio</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Upload a room or raw land plot photo, then generate an instant AI preview or publish your original photo directly.
+          Upload a photo of a room, product, vehicle or machine, then generate an instant AI-enhanced preview or publish your original photo directly.
         </p>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
@@ -1149,13 +1401,13 @@ function StageForm() {
                   beforeImage={previewUrl}
                   afterImage={stagedPreviewUrl}
                   beforeLabel="Original"
-                  afterLabel="AI Staged"
+                  afterLabel={preset.resultLabel}
                   alt={fileName ?? 'Uploaded photo'}
                   className="border border-accent-indigo/30"
                 />
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <p className="flex items-center gap-1.5 text-xs text-accent-emerald-light">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> AI preview ready: {style}
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> AI preview ready: {preset.label} · {style}
                   </p>
                   <div className="flex shrink-0 gap-2">
                     <button type="button" onClick={openFilePicker} className={secondaryButton}>
@@ -1181,7 +1433,7 @@ function StageForm() {
                     </span>
                   </div>
                   <div className="mt-4">
-                    <h3 className="font-semibold text-white">{categoryLabel} Listing</h3>
+                    <h3 className="font-semibold text-white">{preset.subject} Listing</h3>
                     <p className="flex items-center gap-1 text-xs text-slate-400">
                       <MapPin className="h-3 w-3" /> Location added at publish
                     </p>
@@ -1195,7 +1447,7 @@ function StageForm() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <button type="button" onClick={generateAiPreview} className={secondaryButton}>
-                    <Wand2 className="h-3.5 w-3.5" /> Apply AI Staging Instead
+                    <Wand2 className="h-3.5 w-3.5" /> Apply AI Enhancement Instead
                   </button>
                   <div className="flex gap-2">
                     <button type="button" onClick={openFilePicker} className={secondaryButton}>
@@ -1248,7 +1500,7 @@ function StageForm() {
                         className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-900/75 backdrop-blur-sm"
                       >
                         <Loader2 className="h-8 w-8 animate-spin text-accent-indigo-light" />
-                        <span className="text-sm font-semibold text-white">Generating AI Staging Preview...</span>
+                        <span className="text-sm font-semibold text-white">Generating AI Enhancement Preview...</span>
                         <span className="h-1 w-40 overflow-hidden rounded-full bg-white/10">
                           <span className="block h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-accent-indigo to-accent-emerald" />
                         </span>
@@ -1262,7 +1514,7 @@ function StageForm() {
                 ) : (
                   <>
                     <ImagePlus className="h-8 w-8 text-accent-indigo-light" />
-                    <span className="mt-2 text-xs font-semibold text-white">{isLand ? 'Upload Raw Land Photo' : 'Upload Room Photo'}</span>
+                    <span className="mt-2 text-xs font-semibold text-white">Upload {preset.subject} Photo</span>
                     <span className="mt-1 text-[11px] text-slate-500">Tap, click, or drop an image</span>
                   </>
                 )}
@@ -1301,39 +1553,41 @@ function StageForm() {
               <p className="mt-2 text-center text-[11px] text-slate-500">
                 {previewUrl
                   ? mode === 'generating'
-                    ? 'Staging your photo with AI. You can publish the original instead once it finishes.'
-                    : 'Choose AI staging, or publish your original photo as-is.'
-                  : 'Upload a photo to choose AI staging or a direct publish.'}
+                    ? 'Enhancing your photo with AI. You can publish the original instead once it finishes.'
+                    : 'Choose AI enhancement, or publish your original photo as-is.'
+                  : 'Upload a photo to choose AI enhancement or a direct publish.'}
               </p>
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs text-slate-300">Category</label>
+              <label htmlFor={presetSelectId} className="text-xs text-slate-300">Enhancement Preset</label>
               <select
-                value={category}
-                onChange={(e) => handleCategoryChange(e.target.value as SpaceCategory)}
+                id={presetSelectId}
+                value={presetId}
+                onChange={(e) => handlePresetChange(e.target.value as EnhancerPresetId)}
                 className="mt-1 w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2 text-sm text-white"
               >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
+                {ENHANCER_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="text-xs text-slate-300">{isLand ? 'Architectural Concept' : 'Staging Style'}</label>
+              <label htmlFor={variantSelectId} className="text-xs text-slate-300">{preset.variantLabel}</label>
               <select
+                id={variantSelectId}
                 value={style}
-                onChange={(e) => handleStyleChange(e.target.value as StagingStyle)}
+                onChange={(e) => handleStyleChange(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-white/10 bg-ink-700 px-3 py-2 text-sm text-white"
               >
-                {(isLand ? ARCHITECTURAL_STYLES : INTERIOR_STYLES).map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                {preset.variants.map((v) => (
+                  <option key={v} value={v}>{v}</option>
                 ))}
               </select>
-              <p className="mt-1 text-[11px] text-slate-500">Used for AI staging only. Direct publishing keeps your photo unchanged.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Used for AI enhancement only. Direct publishing keeps your photo unchanged.</p>
             </div>
 
             <div className="rounded-xl border border-white/5 bg-ink-900/50 p-4 text-xs text-slate-400">
@@ -1341,7 +1595,7 @@ function StageForm() {
               <ul className="mt-2 space-y-2">
                 <li className="flex items-start gap-2">
                   <Wand2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-indigo-light" />
-                  <span><span className="text-slate-200">Generate Preview</span> stages your photo with AI and shows a before & after slider.</span>
+                  <span><span className="text-slate-200">Generate Preview</span> enhances your photo with the selected AI preset and shows a before & after slider.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-emerald-light" />
@@ -1895,14 +2149,21 @@ function Pricing({
 
 export default function App() {
   const [verifyModalOpen, setVerifyModalOpen] = useState(false)
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>('all')
   const navigate = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
   return (
     <div className="min-h-screen bg-ink-900 text-slate-200">
       <Navbar onNavigate={navigate} onOpenVerify={() => setVerifyModalOpen(true)} />
       <main>
-        <Hero onNavigate={navigate} />
-        <Marketplace />
+        <Hero
+          onNavigate={navigate}
+          onBrowseCategory={(c) => {
+            setMarketFilter(c)
+            navigate('marketplace')
+          }}
+        />
+        <Marketplace filter={marketFilter} onFilterChange={setMarketFilter} />
         <StageForm />
         <Pricing onNavigate={navigate} />
       </main>
